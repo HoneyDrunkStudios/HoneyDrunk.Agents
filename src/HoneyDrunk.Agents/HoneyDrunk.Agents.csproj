@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Runtime for HoneyDrunk Grid agents: an in-process lifecycle, tool invocation through the Capabilities node behind Operator gates, and scoped memory through the Memory node.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="HoneyDrunk.Agents.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\HoneyDrunk.Agents.Abstractions\HoneyDrunk.Agents.Abstractions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="HoneyDrunk.Standards" Version="0.4.4" PrivateAssets="all" />
+    <PackageReference Include="HoneyDrunk.Kernel.Abstractions" Version="0.8.2" />
+    <PackageReference Include="HoneyDrunk.Capabilities.Abstractions" Version="0.1.0" />
+    <PackageReference Include="HoneyDrunk.Memory.Abstractions" Version="0.1.0" />
+    <PackageReference Include="HoneyDrunk.Operator.Abstractions" Version="0.1.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.14" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="CHANGELOG.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>
