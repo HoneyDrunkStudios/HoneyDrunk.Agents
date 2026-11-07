@@ -23,6 +23,9 @@ internal static partial class AgentLog
     [LoggerMessage(Level = LogLevel.Warning, Message = "Agent {AgentId} execution {ExecutionId} timed out")]
     public static partial void AgentTimedOut(ILogger logger, string agentId, string executionId);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Agent {AgentId} {Transition} observer failed with {ExceptionType}")]
+    public static partial void ObserverFailed(ILogger logger, string agentId, string transition, string exceptionType);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Agent {AgentId} execution {ExecutionId} stopped with {ExceptionType}; rethrowing to the host")]
     public static partial void AgentStopped(ILogger logger, string agentId, string executionId, string exceptionType);
 }
