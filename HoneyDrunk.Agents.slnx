@@ -2,9 +2,11 @@
   <Folder Name="/src/">
     <Project Path="src/HoneyDrunk.Agents.Abstractions/HoneyDrunk.Agents.Abstractions.csproj" />
     <Project Path="src/HoneyDrunk.Agents/HoneyDrunk.Agents.csproj" />
+    <Project Path="src/HoneyDrunk.Agents.Testing/HoneyDrunk.Agents.Testing.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/HoneyDrunk.Agents.Abstractions.Tests/HoneyDrunk.Agents.Abstractions.Tests.csproj" />
     <Project Path="tests/HoneyDrunk.Agents.Tests/HoneyDrunk.Agents.Tests.csproj" />
+    <Project Path="tests/HoneyDrunk.Agents.Testing.Tests/HoneyDrunk.Agents.Testing.Tests.csproj" />
   </Folder>
 </Solution>

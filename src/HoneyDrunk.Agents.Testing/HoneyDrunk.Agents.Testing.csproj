@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Test fixtures for HoneyDrunk Grid agents: a harness over the real runtime with in-memory Capabilities, Memory and Operator pieces, scripted agents, in-memory tools and memory, and deterministic Kernel contexts. For test projects only.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\HoneyDrunk.Agents\HoneyDrunk.Agents.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="HoneyDrunk.Standards" Version="0.4.4" PrivateAssets="all" />
+    <PackageReference Include="HoneyDrunk.Capabilities.Testing" Version="0.1.0" />
+    <PackageReference Include="HoneyDrunk.Memory" Version="0.1.0" />
+    <PackageReference Include="HoneyDrunk.Memory.Providers.InMemory" Version="0.1.0" />
+    <PackageReference Include="HoneyDrunk.Operator.Testing" Version="0.1.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="CHANGELOG.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>
