@@ -1,0 +1,89 @@
+# package: HoneyDrunk.Agents.Abstractions
+# version: 0.1.0
+# roots: IAgent, IAgentExecutionContext, IToolInvoker, IAgentMemory
+type HoneyDrunk.Agents.Abstractions.AgentGrants: sealed class implements System.IEquatable<HoneyDrunk.Agents.Abstractions.AgentGrants>
+  HoneyDrunk.Agents.Abstractions.AgentGrants public ctor(System.Collections.Generic.IReadOnlyList<System.String> Scopes, System.Collections.Generic.IReadOnlyList<System.String> Roles)
+  HoneyDrunk.Agents.Abstractions.AgentGrants public method HoneyDrunk.Agents.Abstractions.AgentGrants Narrow(HoneyDrunk.Agents.Abstractions.AgentGrants? narrowing)
+  HoneyDrunk.Agents.Abstractions.AgentGrants public property System.Collections.Generic.IReadOnlyList<System.String> Roles { get; }
+  HoneyDrunk.Agents.Abstractions.AgentGrants public property System.Collections.Generic.IReadOnlyList<System.String> Scopes { get; }
+  HoneyDrunk.Agents.Abstractions.AgentGrants public static property HoneyDrunk.Agents.Abstractions.AgentGrants None { get; }
+type HoneyDrunk.Agents.Abstractions.AgentMemoryItem: sealed class implements System.IEquatable<HoneyDrunk.Agents.Abstractions.AgentMemoryItem>
+  HoneyDrunk.Agents.Abstractions.AgentMemoryItem public ctor(System.String Id, System.String Kind, System.String Content, System.Collections.Generic.IReadOnlyList<System.String> Tags, System.DateTimeOffset WrittenAt, System.Boolean FromHomeScope)
+  HoneyDrunk.Agents.Abstractions.AgentMemoryItem public override method System.String ToString()
+  HoneyDrunk.Agents.Abstractions.AgentMemoryItem public property System.Boolean FromHomeScope { get; init; }
+  HoneyDrunk.Agents.Abstractions.AgentMemoryItem public property System.Collections.Generic.IReadOnlyList<System.String> Tags { get; }
+  HoneyDrunk.Agents.Abstractions.AgentMemoryItem public property System.DateTimeOffset WrittenAt { get; init; }
+  HoneyDrunk.Agents.Abstractions.AgentMemoryItem public property System.String Content { get; }
+  HoneyDrunk.Agents.Abstractions.AgentMemoryItem public property System.String Id { get; }
+  HoneyDrunk.Agents.Abstractions.AgentMemoryItem public property System.String Kind { get; }
+type HoneyDrunk.Agents.Abstractions.AgentMemoryNote: sealed class implements System.IEquatable<HoneyDrunk.Agents.Abstractions.AgentMemoryNote>
+  HoneyDrunk.Agents.Abstractions.AgentMemoryNote public ctor(System.String Kind, System.String Content, System.Collections.Generic.IReadOnlyList<System.String> Tags)
+  HoneyDrunk.Agents.Abstractions.AgentMemoryNote public override method System.String ToString()
+  HoneyDrunk.Agents.Abstractions.AgentMemoryNote public property System.Collections.Generic.IReadOnlyList<System.String> Tags { get; }
+  HoneyDrunk.Agents.Abstractions.AgentMemoryNote public property System.String Content { get; }
+  HoneyDrunk.Agents.Abstractions.AgentMemoryNote public property System.String Kind { get; }
+type HoneyDrunk.Agents.Abstractions.AgentOutcome: enum System.Int32 implements System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+  HoneyDrunk.Agents.Abstractions.AgentOutcome value AwaitingApproval = 2
+  HoneyDrunk.Agents.Abstractions.AgentOutcome value Completed = 0
+  HoneyDrunk.Agents.Abstractions.AgentOutcome value Failed = 4
+  HoneyDrunk.Agents.Abstractions.AgentOutcome value Halted = 3
+  HoneyDrunk.Agents.Abstractions.AgentOutcome value Rejected = 1
+type HoneyDrunk.Agents.Abstractions.AgentRecall: sealed class implements System.IEquatable<HoneyDrunk.Agents.Abstractions.AgentRecall>
+  HoneyDrunk.Agents.Abstractions.AgentRecall public const field System.Int32 MaxLimit = 200
+  HoneyDrunk.Agents.Abstractions.AgentRecall public ctor(System.Int32 Limit = 20, System.String? Kind = null, System.Collections.Generic.IReadOnlyList<System.String>? AllTags = null)
+  HoneyDrunk.Agents.Abstractions.AgentRecall public property System.Collections.Generic.IReadOnlyList<System.String>? AllTags { get; }
+  HoneyDrunk.Agents.Abstractions.AgentRecall public property System.Int32 Limit { get; }
+  HoneyDrunk.Agents.Abstractions.AgentRecall public property System.String? Kind { get; init; }
+type HoneyDrunk.Agents.Abstractions.AgentRequest: sealed class implements System.IEquatable<HoneyDrunk.Agents.Abstractions.AgentRequest>
+  HoneyDrunk.Agents.Abstractions.AgentRequest public ctor(System.String Kind, System.Text.Json.JsonElement Payload)
+  HoneyDrunk.Agents.Abstractions.AgentRequest public override method System.String ToString()
+  HoneyDrunk.Agents.Abstractions.AgentRequest public property System.String Kind { get; }
+  HoneyDrunk.Agents.Abstractions.AgentRequest public property System.Text.Json.JsonElement Payload { get; }
+type HoneyDrunk.Agents.Abstractions.AgentResult: sealed class implements System.IEquatable<HoneyDrunk.Agents.Abstractions.AgentResult>
+  HoneyDrunk.Agents.Abstractions.AgentResult public ctor(HoneyDrunk.Agents.Abstractions.AgentOutcome Outcome, System.Text.Json.JsonElement? Output, System.String? ReasonCode, System.String? ApprovalId)
+  HoneyDrunk.Agents.Abstractions.AgentResult public override method System.String ToString()
+  HoneyDrunk.Agents.Abstractions.AgentResult public property HoneyDrunk.Agents.Abstractions.AgentOutcome Outcome { get; init; }
+  HoneyDrunk.Agents.Abstractions.AgentResult public property System.String? ApprovalId { get; init; }
+  HoneyDrunk.Agents.Abstractions.AgentResult public property System.String? ReasonCode { get; init; }
+  HoneyDrunk.Agents.Abstractions.AgentResult public property System.Text.Json.JsonElement? Output { get; }
+type HoneyDrunk.Agents.Abstractions.AgentToolBinding: sealed class implements System.IEquatable<HoneyDrunk.Agents.Abstractions.AgentToolBinding>
+  HoneyDrunk.Agents.Abstractions.AgentToolBinding public ctor(System.String Name, System.String Version)
+  HoneyDrunk.Agents.Abstractions.AgentToolBinding public property System.String Name { get; }
+  HoneyDrunk.Agents.Abstractions.AgentToolBinding public property System.String Version { get; }
+type HoneyDrunk.Agents.Abstractions.IAgent: interface
+  HoneyDrunk.Agents.Abstractions.IAgent public method System.Threading.Tasks.Task<HoneyDrunk.Agents.Abstractions.AgentResult> ExecuteAsync(HoneyDrunk.Agents.Abstractions.IAgentExecutionContext context, HoneyDrunk.Agents.Abstractions.AgentRequest request, System.Threading.CancellationToken cancellationToken)
+  HoneyDrunk.Agents.Abstractions.IAgent public property HoneyDrunk.Kernel.Abstractions.Agents.IAgentDescriptor Descriptor { get; }
+type HoneyDrunk.Agents.Abstractions.IAgentExecutionContext: interface implements HoneyDrunk.Kernel.Abstractions.Agents.IAgentExecutionContext
+  HoneyDrunk.Agents.Abstractions.IAgentExecutionContext public property HoneyDrunk.Agents.Abstractions.AgentGrants Grants { get; }
+  HoneyDrunk.Agents.Abstractions.IAgentExecutionContext public property HoneyDrunk.Agents.Abstractions.IAgentMemory Memory { get; }
+  HoneyDrunk.Agents.Abstractions.IAgentExecutionContext public property HoneyDrunk.Agents.Abstractions.IToolInvoker Tools { get; }
+  HoneyDrunk.Agents.Abstractions.IAgentExecutionContext public property System.Collections.Generic.IReadOnlyList<HoneyDrunk.Agents.Abstractions.AgentToolBinding> ToolBindings { get; }
+  HoneyDrunk.Agents.Abstractions.IAgentExecutionContext public property System.String ExecutionId { get; }
+type HoneyDrunk.Agents.Abstractions.IAgentMemory: interface
+  HoneyDrunk.Agents.Abstractions.IAgentMemory public method System.Threading.Tasks.Task<HoneyDrunk.Agents.Abstractions.AgentMemoryItem> RememberAsync(HoneyDrunk.Agents.Abstractions.AgentMemoryNote note, System.Threading.CancellationToken cancellationToken = default)
+  HoneyDrunk.Agents.Abstractions.IAgentMemory public method System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HoneyDrunk.Agents.Abstractions.AgentMemoryItem>> RecallAsync(HoneyDrunk.Agents.Abstractions.AgentRecall recall, System.Threading.CancellationToken cancellationToken = default)
+type HoneyDrunk.Agents.Abstractions.IToolInvoker: interface
+  HoneyDrunk.Agents.Abstractions.IToolInvoker public method System.Threading.Tasks.Task<HoneyDrunk.Agents.Abstractions.ToolCallResult> InvokeAsync(HoneyDrunk.Agents.Abstractions.ToolCall call, System.Threading.CancellationToken cancellationToken = default)
+type HoneyDrunk.Agents.Abstractions.ToolCall: sealed class implements System.IEquatable<HoneyDrunk.Agents.Abstractions.ToolCall>
+  HoneyDrunk.Agents.Abstractions.ToolCall public ctor(System.String Name, System.String Version, System.Text.Json.JsonElement Arguments)
+  HoneyDrunk.Agents.Abstractions.ToolCall public override method System.String ToString()
+  HoneyDrunk.Agents.Abstractions.ToolCall public property System.String Name { get; }
+  HoneyDrunk.Agents.Abstractions.ToolCall public property System.String Version { get; }
+  HoneyDrunk.Agents.Abstractions.ToolCall public property System.Text.Json.JsonElement Arguments { get; }
+type HoneyDrunk.Agents.Abstractions.ToolCallResult: sealed class implements System.IEquatable<HoneyDrunk.Agents.Abstractions.ToolCallResult>
+  HoneyDrunk.Agents.Abstractions.ToolCallResult public ctor(HoneyDrunk.Agents.Abstractions.ToolCallStatus Status, System.Text.Json.JsonElement? Output, System.String? ErrorCode, System.String? ApprovalId)
+  HoneyDrunk.Agents.Abstractions.ToolCallResult public override method System.String ToString()
+  HoneyDrunk.Agents.Abstractions.ToolCallResult public property HoneyDrunk.Agents.Abstractions.ToolCallStatus Status { get; init; }
+  HoneyDrunk.Agents.Abstractions.ToolCallResult public property System.String? ApprovalId { get; init; }
+  HoneyDrunk.Agents.Abstractions.ToolCallResult public property System.String? ErrorCode { get; init; }
+  HoneyDrunk.Agents.Abstractions.ToolCallResult public property System.Text.Json.JsonElement? Output { get; }
+type HoneyDrunk.Agents.Abstractions.ToolCallStatus: enum System.Int32 implements System.IComparable, System.IConvertible, System.IFormattable, System.ISpanFormattable
+  HoneyDrunk.Agents.Abstractions.ToolCallStatus value AwaitingApproval = 4
+  HoneyDrunk.Agents.Abstractions.ToolCallStatus value Denied = 3
+  HoneyDrunk.Agents.Abstractions.ToolCallStatus value Failed = 8
+  HoneyDrunk.Agents.Abstractions.ToolCallStatus value Halted = 5
+  HoneyDrunk.Agents.Abstractions.ToolCallStatus value InvalidArguments = 7
+  HoneyDrunk.Agents.Abstractions.ToolCallStatus value LimitReached = 6
+  HoneyDrunk.Agents.Abstractions.ToolCallStatus value NotBound = 1
+  HoneyDrunk.Agents.Abstractions.ToolCallStatus value NotFound = 2
+  HoneyDrunk.Agents.Abstractions.ToolCallStatus value Succeeded = 0
