@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/HoneyDrunk.Agents/HoneyDrunk.Agents.csproj" />
+    <PackageReference Include="HoneyDrunk.Audit.Abstractions" Version="0.2.2" />
+    <PackageReference Include="HoneyDrunk.Auth" Version="0.6.2" />
+    <PackageReference Include="HoneyDrunk.Capabilities.Testing" Version="0.1.0" />
+    <PackageReference Include="HoneyDrunk.Kernel" Version="0.8.2" />
+    <PackageReference Include="HoneyDrunk.Memory" Version="0.1.0" />
+    <PackageReference Include="HoneyDrunk.Memory.Providers.InMemory" Version="0.1.0" />
+    <PackageReference Include="HoneyDrunk.Operator.Testing" Version="0.1.2" />
+    <PackageReference Include="HoneyDrunk.Standards" Version="0.4.4" PrivateAssets="all" />
+    <PackageReference Include="HoneyDrunk.Standards.Tests" Version="0.4.4" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

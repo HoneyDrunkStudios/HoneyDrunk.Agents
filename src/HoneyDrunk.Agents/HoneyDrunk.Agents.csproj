@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>In-process agent execution for the HoneyDrunk Grid.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../HoneyDrunk.Agents.Abstractions/HoneyDrunk.Agents.Abstractions.csproj" />
+    <PackageReference Include="HoneyDrunk.Kernel.Abstractions" Version="0.8.2" />
+    <PackageReference Include="HoneyDrunk.Capabilities.Abstractions" Version="0.1.0" />
+    <PackageReference Include="HoneyDrunk.Memory.Abstractions" Version="0.1.0" />
+    <PackageReference Include="HoneyDrunk.Operator.Abstractions" Version="0.1.2" />
+    <PackageReference Include="HoneyDrunk.Standards" Version="0.4.4" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+    <None Include="../../LICENSE" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>
