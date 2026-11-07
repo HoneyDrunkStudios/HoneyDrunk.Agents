@@ -1,6 +1,8 @@
 # HoneyDrunk.Agents agent instructions
 
-Current main is a repository scaffold, not an implemented runtime or published capability. Inspect [README.md](README.md), the tracked files and open implementation PRs before making claims. No solution, package manifest or executable test suite is checked in. Do not invent build/test commands, node ownership or an implementation plan from the repository name. Confirm the selected responsibility before adding runtime code; an open PR is not merged behavior.
+The solution contains the agent-facing and host-facing contracts. Inspect [README.md](README.md) and the current branch before making runtime or release claims. The accepted node boundary is ADR-0020.
+
+Run `dotnet test HoneyDrunk.Agents.slnx -c Release` and `dotnet build HoneyDrunk.Agents.slnx -c Release` for implementation changes. The agent-facing API is tracked by the contract-shape test. After an approved shape change and version increase, set `HONEYDRUNK_UPDATE_CONTRACT_SHAPE=1` and run `dotnet test HoneyDrunk.Agents.slnx -c Release --filter Category=ContractShape` to regenerate the baseline. Unset the variable before normal test runs.
 
 Read the [shared engineering conventions](https://github.com/HoneyDrunkStudios/HoneyDrunk.Standards/blob/main/HoneyDrunk.Standards/docs/CONVENTIONS.md) and this repository's owning documentation before editing. Apply the parts relevant to this stack; preserve existing public contracts, dependency direction and repository-specific behavior. Verify shared capabilities in current code before reusing them; a catalog entry or scaffold is not an implemented integration.
 
