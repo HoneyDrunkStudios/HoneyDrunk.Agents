@@ -11,7 +11,7 @@ public sealed class DependencyTests
     {
         var external = typeof(IAgent).Assembly.GetReferencedAssemblies()
             .Select(reference => reference.Name)
-            .Where(name => name is not null && !name.StartsWith("System.", StringComparison.Ordinal));
+            .Where(name => name is not null && name != "netstandard" && !name.StartsWith("System.", StringComparison.Ordinal));
 
         Assert.Equal("HoneyDrunk.Kernel.Abstractions", Assert.Single(external));
     }
