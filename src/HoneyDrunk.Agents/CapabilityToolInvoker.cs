@@ -15,6 +15,8 @@ namespace HoneyDrunk.Agents;
 /// </summary>
 internal sealed class CapabilityToolInvoker : IToolInvoker, IDisposable
 {
+    private const string Unbound = "unbound";
+
     private readonly ExecutionIdentity identity;
     private readonly ICapabilityRegistry registry;
     private readonly ICapabilityInvoker invoker;
@@ -60,18 +62,24 @@ internal sealed class CapabilityToolInvoker : IToolInvoker, IDisposable
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref this.disposed) != 0, this);
         ArgumentNullException.ThrowIfNull(call);
+
+        // Only a bound tool's own name reaches telemetry and logs; a proposed name may carry anything.
+        var binding = this.identity.Bindings.FirstOrDefault(candidate => string.Equals(candidate.Name, call.Name, StringComparison.Ordinal)
+            && string.Equals(candidate.Version, call.Version, StringComparison.Ordinal));
+        var toolName = binding?.Name ?? Unbound;
+        var toolVersion = binding?.Version ?? Unbound;
         using var activity = this.telemetry.Start(
             AgentTelemetry.ToolCallActivity,
             new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 [AgentTelemetry.AgentIdTag] = this.identity.AgentId,
                 [AgentTelemetry.ExecutionIdTag] = this.identity.ExecutionId,
-                [AgentTelemetry.ToolNameTag] = call.Name,
-                [AgentTelemetry.ToolVersionTag] = call.Version,
+                [AgentTelemetry.ToolNameTag] = toolName,
+                [AgentTelemetry.ToolVersionTag] = toolVersion,
             });
-        var result = await this.InvokeCoreAsync(call, activity, cancellationToken).ConfigureAwait(false);
+        var result = await this.InvokeCoreAsync(call, binding, activity, cancellationToken).ConfigureAwait(false);
         activity?.SetTag(AgentTelemetry.ToolStatusTag, result.Status.ToString());
-        AgentLog.ToolCallEnded(this.logger, this.identity.AgentId, call.Name + "@" + call.Version, result.Status.ToString(), result.ErrorCode);
+        AgentLog.ToolCallEnded(this.logger, this.identity.AgentId, toolName + "@" + toolVersion, result.Status.ToString(), result.ErrorCode);
         return result;
     }
 
@@ -90,15 +98,14 @@ internal sealed class CapabilityToolInvoker : IToolInvoker, IDisposable
         _ => Fail(ToolCallStatus.Failed, "failed"),
     };
 
-    private async Task<ToolCallResult> InvokeCoreAsync(ToolCall call, Activity? activity, CancellationToken cancellationToken)
+    private async Task<ToolCallResult> InvokeCoreAsync(ToolCall call, AgentToolBinding? binding, Activity? activity, CancellationToken cancellationToken)
     {
         if (Interlocked.Increment(ref this.calls) > this.options.MaxToolCallsPerExecution)
         {
             return Fail(ToolCallStatus.LimitReached, "tool_call_limit");
         }
 
-        if (!this.identity.Bindings.Any(binding => string.Equals(binding.Name, call.Name, StringComparison.Ordinal)
-            && string.Equals(binding.Version, call.Version, StringComparison.Ordinal)))
+        if (binding is null)
         {
             return Fail(ToolCallStatus.NotBound, "not_bound");
         }

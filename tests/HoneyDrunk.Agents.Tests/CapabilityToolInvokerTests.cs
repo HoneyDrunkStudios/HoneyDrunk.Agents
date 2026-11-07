@@ -403,6 +403,21 @@ public sealed class CapabilityToolInvokerTests
         Assert.DoesNotContain(fixture.Log.Entries, entry => entry.message.Contains(Sentinel, StringComparison.Ordinal));
     }
 
+    /// <summary>A proposed tool name outside the bindings never reaches telemetry or logs.</summary>
+    [Fact]
+    public async Task Unbound_tool_name_never_in_telemetry_or_logs()
+    {
+        var fixture = new InvokerFixture();
+        using var invoker = fixture.Create();
+
+        var result = await invoker.InvokeAsync(InvokerFixture.Call(name: Sentinel, version: Sentinel));
+
+        Assert.Equal(ToolCallStatus.NotBound, result.Status);
+        Assert.Contains(fixture.Telemetry.Tags, tag => tag.Key == "tool.name" && Equals(tag.Value, "unbound"));
+        Assert.DoesNotContain(fixture.Telemetry.Tags, tag => (tag.Value?.ToString() ?? string.Empty).Contains(Sentinel, StringComparison.Ordinal));
+        Assert.DoesNotContain(fixture.Log.Entries, entry => entry.message.Contains(Sentinel, StringComparison.Ordinal));
+    }
+
     /// <summary>Using the invoker after its execution ends throws.</summary>
     [Fact]
     public async Task Use_after_dispose_throws()
