@@ -7,20 +7,23 @@ using System.Text.Json;
 namespace HoneyDrunk.Agents;
 
 /// <summary>
-/// A stable key for one tool call: <c>tool-</c> plus the first 32 hex characters of SHA-256 over the agent id, the
-/// tool key and the canonical arguments (object keys sorted ordinally at every depth, no whitespace).
+/// A stable key for one tool call: <c>tool-</c> plus the first 32 hex characters of HMAC-SHA-256, under a per-host
+/// secret, over the agent id, the tool key and the canonical arguments (object keys sorted ordinally at every depth,
+/// no whitespace). The secret keeps the key from being used to guess low-entropy arguments.
 /// </summary>
 internal static class ToolRequestKey
 {
     private const char Separator = '\u001f';
 
     /// <summary>Computes the key.</summary>
+    /// <param name="secret">The per-host HMAC key.</param>
     /// <param name="agentId">The agent id.</param>
     /// <param name="key">The tool key.</param>
     /// <param name="arguments">The arguments.</param>
     /// <returns>The request key.</returns>
-    public static string For(string agentId, CapabilityKey key, JsonElement arguments)
+    public static string For(byte[] secret, string agentId, CapabilityKey key, JsonElement arguments)
     {
+        ArgumentNullException.ThrowIfNull(secret);
         ArgumentException.ThrowIfNullOrWhiteSpace(agentId);
         var buffer = new ArrayBufferWriter<byte>();
         buffer.Write(Encoding.UTF8.GetBytes(agentId + Separator + key.Name + Separator + key.Version + Separator));
@@ -29,7 +32,7 @@ internal static class ToolRequestKey
             WriteCanonical(writer, arguments);
         }
 
-        var hash = SHA256.HashData(buffer.WrittenSpan);
+        var hash = HMACSHA256.HashData(secret, buffer.WrittenSpan);
         return "tool-" + Convert.ToHexStringLower(hash)[..32];
     }
 

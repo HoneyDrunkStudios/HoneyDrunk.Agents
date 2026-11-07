@@ -16,8 +16,10 @@ namespace HoneyDrunk.Agents;
 /// <summary>
 /// The per-host agent registry and runner (ADR-0020 D11). Each execution runs in its own dependency-injection scope:
 /// it checks the grid context, the tenant, the agent's breaker and memory access before the agent runs, then disposes
-/// everything execution-scoped when it completes. Agent exceptions become <c>agent_error</c>, except configured stop
-/// exceptions, which are rethrown unchanged after cleanup and never retried.
+/// everything execution-scoped when it completes. The grid context is read once from the ambient accessor and the
+/// execution's operation context is built over it, so scoped Kernel state in the new scope is never relied on.
+/// Agent exceptions become <c>agent_error</c>, except configured stop exceptions, which are rethrown unchanged after
+/// cleanup and never retried.
 /// </summary>
 public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
 {
@@ -37,7 +39,7 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
     /// <param name="options">The runtime options.</param>
     /// <param name="timeProvider">The clock.</param>
     /// <param name="logger">The logger.</param>
-    /// <exception cref="ArgumentException">A propagated type does not derive from <see cref="Exception"/>.</exception>
+    /// <exception cref="ArgumentException">An option is out of range, or a propagated type does not derive from <see cref="Exception"/>.</exception>
     public InProcessAgentLifecycle(
         IServiceScopeFactory scopeFactory,
         ToolApprovalLedger ledger,
@@ -53,23 +55,24 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
         this.timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
         this.propagated = this.options.PropagatedExceptionTypes.ToArray();
-        if (this.propagated.Any(type => type is null || !typeof(Exception).IsAssignableFrom(type)))
-        {
-            throw new ArgumentException("Every propagated type must derive from System.Exception.", nameof(options));
-        }
+        Validate(this.options, this.propagated);
     }
 
     /// <inheritdoc />
     public void Register(AgentRegistration registration)
     {
         ArgumentNullException.ThrowIfNull(registration);
-        var agentId = registration.Agent.Descriptor?.AgentId;
-        if (agentId is null || !AgentIdPattern().IsMatch(agentId))
+
+        // The id and descriptor are captured once, so a descriptor that changes later cannot move the agent to
+        // another breaker or memory scope.
+        var descriptor = registration.Agent.Descriptor;
+        var agentId = descriptor?.AgentId;
+        if (descriptor is null || agentId is null || !AgentIdPattern().IsMatch(agentId))
         {
             throw new ArgumentException("The agent id must be 1 to 64 characters of a-z, 0-9, '.', '_' or '-', starting with a letter or digit.", nameof(registration));
         }
 
-        if (!this.agents.TryAdd(agentId, new Entry(registration)))
+        if (!this.agents.TryAdd(agentId, new Entry(agentId, descriptor, registration)))
         {
             throw new InvalidOperationException($"An agent with id '{agentId}' is already registered.");
         }
@@ -81,7 +84,7 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
     public async Task InitializeAsync(string agentId, CancellationToken cancellationToken = default)
     {
         var entry = this.Get(agentId);
-        RequirePhase(agentId, entry, AgentLifecyclePhase.Registered, "initialize");
+        RequirePhase(entry, AgentLifecyclePhase.Registered, "initialize");
         var scope = this.scopeFactory.CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
         {
@@ -110,24 +113,29 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(options);
         var entry = this.Get(agentId);
-        RequirePhase(agentId, entry, AgentLifecyclePhase.Initialized, "execute");
+        RequirePhase(entry, AgentLifecyclePhase.Initialized, "execute");
         var executionId = Guid.CreateVersion7(this.timeProvider.GetUtcNow()).ToString("N");
         var scope = this.scopeFactory.CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
         {
             var services = scope.ServiceProvider;
-            using var activity = services.GetRequiredService<ITelemetryActivityFactory>().Start(
-                AgentTelemetry.ExecuteActivity,
-                new Dictionary<string, object?>(StringComparer.Ordinal)
-                {
-                    [AgentTelemetry.AgentIdTag] = agentId,
-                    [AgentTelemetry.ExecutionIdTag] = executionId,
-                });
-            this.Notify(agentId, executionId, "execute", null);
+            var grid = ReadGridContext(services);
+            using var activity = grid is { IsInitialized: true }
+                ? services.GetRequiredService<ITelemetryActivityFactory>().StartExplicit(
+                    AgentTelemetry.ExecuteActivity,
+                    grid,
+                    null,
+                    new Dictionary<string, object?>(StringComparer.Ordinal)
+                    {
+                        [AgentTelemetry.AgentIdTag] = entry.AgentId,
+                        [AgentTelemetry.ExecutionIdTag] = executionId,
+                    })
+                : null;
+            this.Notify(entry.AgentId, executionId, "execute", null);
             var outcome = "error";
             try
             {
-                var result = await this.ExecuteInScopeAsync(entry.Registration, executionId, request, options, services, cancellationToken).ConfigureAwait(false);
+                var result = await this.ExecuteInScopeAsync(entry, executionId, grid, request, options, services, cancellationToken).ConfigureAwait(false);
                 outcome = result.Outcome.ToString();
                 return result;
             }
@@ -144,7 +152,7 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
             finally
             {
                 activity?.SetTag(AgentTelemetry.OutcomeTag, outcome);
-                this.Notify(agentId, executionId, "complete", outcome);
+                this.Notify(entry.AgentId, executionId, "complete", outcome);
             }
         }
     }
@@ -154,20 +162,49 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
     {
         cancellationToken.ThrowIfCancellationRequested();
         var entry = this.Get(agentId);
-        entry.MoveTo(AgentLifecyclePhase.Decommissioned);
-        this.Notify(agentId, null, "decommission", null);
+
+        // Executions already past the phase check finish; new ones are refused. Repeating is a no-op.
+        if (entry.TryMove(AgentLifecyclePhase.Initialized, AgentLifecyclePhase.Decommissioned)
+            || entry.TryMove(AgentLifecyclePhase.Registered, AgentLifecyclePhase.Decommissioned))
+        {
+            this.Notify(entry.AgentId, null, "decommission", null);
+        }
+
         return Task.CompletedTask;
     }
 
     /// <inheritdoc />
     public AgentLifecyclePhase GetPhase(string agentId) => this.Get(agentId).Phase;
 
-    private static void RequirePhase(string agentId, Entry entry, AgentLifecyclePhase required, string action)
+    private static void Validate(AgentRuntimeOptions options, Type[] propagated)
+    {
+        if (options.MaxToolCallsPerExecution < 1)
+        {
+            throw new ArgumentException("MaxToolCallsPerExecution must be at least 1.", nameof(options));
+        }
+
+        if (options.ExecutionTimeout <= TimeSpan.Zero || options.ExecutionTimeout > TimeSpan.FromMilliseconds(int.MaxValue))
+        {
+            throw new ArgumentException("ExecutionTimeout must be positive and at most about 24 days.", nameof(options));
+        }
+
+        if (options.ToolApprovalTtl <= TimeSpan.Zero)
+        {
+            throw new ArgumentException("ToolApprovalTtl must be positive.", nameof(options));
+        }
+
+        if (propagated.Any(type => type is null || !typeof(Exception).IsAssignableFrom(type)))
+        {
+            throw new ArgumentException("Every propagated type must derive from System.Exception.", nameof(options));
+        }
+    }
+
+    private static void RequirePhase(Entry entry, AgentLifecyclePhase required, string action)
     {
         var phase = entry.Phase;
         if (phase != required)
         {
-            throw new InvalidOperationException($"Agent '{agentId}' is {phase}; {action} needs {required}.");
+            throw new InvalidOperationException($"Agent '{entry.AgentId}' is {phase}; {action} needs {required}.");
         }
     }
 
@@ -191,6 +228,7 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
         }
         catch (InvalidOperationException)
         {
+            // Kernel's accessors throw when no context is set for this request or flow.
             return null;
         }
     }
@@ -201,15 +239,14 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
     private static partial Regex AgentIdPattern();
 
     private async Task<AgentResult> ExecuteInScopeAsync(
-        AgentRegistration registration,
+        Entry entry,
         string executionId,
+        IGridContext? grid,
         AgentRequest request,
         AgentExecutionOptions executionOptions,
         IServiceProvider services,
         CancellationToken cancellationToken)
     {
-        var agentId = registration.Agent.Descriptor.AgentId;
-        var grid = ReadGridContext(services);
         if (grid is null || !grid.IsInitialized)
         {
             return Refuse(AgentOutcome.Failed, "grid_context_missing");
@@ -220,11 +257,20 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
             return Refuse(AgentOutcome.Rejected, "tenant_mismatch");
         }
 
-        var identity = new ExecutionIdentity(agentId, executionId, grid.CorrelationId, registration.Grants.Narrow(executionOptions.NarrowGrantsTo), registration.Tools);
+        var registration = entry.Registration;
+        var identity = new ExecutionIdentity(entry.AgentId, executionId, grid.CorrelationId, registration.Grants.Narrow(executionOptions.NarrowGrantsTo), registration.Tools);
         var breaker = services.GetRequiredService<ICircuitBreaker>();
-        if (!await breaker.IsAllowedAsync(identity.BreakerName, cancellationToken).ConfigureAwait(false))
+        try
         {
-            return Refuse(AgentOutcome.Halted, "breaker_open");
+            if (!await breaker.IsAllowedAsync(identity.BreakerName, cancellationToken).ConfigureAwait(false))
+            {
+                return Refuse(AgentOutcome.Halted, "breaker_open");
+            }
+        }
+        catch (Exception exception) when (this.IsRefusable(exception, cancellationToken))
+        {
+            AgentLog.AgentFailed(this.logger, entry.AgentId, executionId, exception.GetType().Name);
+            return Refuse(AgentOutcome.Failed, "gate_error");
         }
 
         IMemoryScope home;
@@ -236,6 +282,11 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
         catch (MemoryEscalationDeniedException)
         {
             return Refuse(AgentOutcome.Rejected, "memory_escalation_denied");
+        }
+        catch (Exception exception) when (this.IsRefusable(exception, cancellationToken))
+        {
+            AgentLog.AgentFailed(this.logger, entry.AgentId, executionId, exception.GetType().Name);
+            return Refuse(AgentOutcome.Failed, "memory_error");
         }
 
         var telemetry = services.GetRequiredService<ITelemetryActivityFactory>();
@@ -249,22 +300,30 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
             telemetry,
             this.logger,
             this.timeProvider);
-        var kernel = services.GetRequiredService<IAgentExecutionContextFactory>().Create(registration.Agent.Descriptor, grid);
-        using var operation = kernel.OperationContext;
+        using var operation = new AgentOperationContext(grid, "Agent:" + entry.AgentId, executionId, this.timeProvider);
+        var kernel = services.GetRequiredService<IAgentExecutionContextFactory>().Create(entry.Descriptor, grid, operation);
         using var context = new AgentExecutionContext(kernel, identity, tools, memory);
-        return await this.RunAsync(registration.Agent, context, request, operation, cancellationToken).ConfigureAwait(false);
+        return await this.RunAsync(entry.Registration.Agent, context, request, operation, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<AgentResult> RunAsync(IAgent agent, AgentExecutionContext context, AgentRequest request, IOperationContext operation, CancellationToken cancellationToken)
     {
         using var timeout = new CancellationTokenSource(this.options.ExecutionTimeout, this.timeProvider);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+        Task<AgentResult>? running = null;
         try
         {
             // WaitAsync stops waiting at the deadline even when an agent ignores its token; the context is then disposed.
-            var result = await agent.ExecuteAsync(context, request, linked.Token).WaitAsync(linked.Token).ConfigureAwait(false);
+            running = agent.ExecuteAsync(context, request, linked.Token);
+            var result = await running.WaitAsync(linked.Token).ConfigureAwait(false);
+            if (result is null)
+            {
+                operation.Fail("agent_error");
+                return Refuse(AgentOutcome.Failed, "agent_error");
+            }
+
             operation.Complete();
-            return result ?? Refuse(AgentOutcome.Failed, "agent_error");
+            return result;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -273,26 +332,47 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
         }
         catch (OperationCanceledException) when (timeout.IsCancellationRequested)
         {
-            AgentLog.AgentTimedOut(this.logger, context.Agent.AgentId, context.ExecutionId);
+            AgentLog.AgentTimedOut(this.logger, context.AgentIdForLogs, context.ExecutionId);
+            this.ObserveAbandoned(running, context);
             operation.Fail("timeout");
             return Refuse(AgentOutcome.Failed, "timeout");
         }
         catch (Exception exception) when (this.IsPropagated(exception))
         {
-            AgentLog.AgentStopped(this.logger, context.Agent.AgentId, context.ExecutionId, exception.GetType().Name);
+            AgentLog.AgentStopped(this.logger, context.AgentIdForLogs, context.ExecutionId, exception.GetType().Name);
             operation.Fail(exception.GetType().Name);
             throw;
         }
         catch (Exception exception) when (!this.IsPropagated(exception))
         {
             // The message may carry model output or secrets; only the type name is recorded.
-            AgentLog.AgentFailed(this.logger, context.Agent.AgentId, context.ExecutionId, exception.GetType().Name);
+            AgentLog.AgentFailed(this.logger, context.AgentIdForLogs, context.ExecutionId, exception.GetType().Name);
             operation.Fail(exception.GetType().Name);
             return Refuse(AgentOutcome.Failed, "agent_error");
         }
     }
 
+    // An agent abandoned at its deadline may still fault later; observe it so the fault is logged, not lost.
+    private void ObserveAbandoned(Task<AgentResult>? running, AgentExecutionContext context)
+    {
+        if (running is null || running.IsCompleted)
+        {
+            return;
+        }
+
+        var agentId = context.AgentIdForLogs;
+        var executionId = context.ExecutionId;
+        _ = running.ContinueWith(
+            task => AgentLog.AgentFailed(this.logger, agentId, executionId, task.Exception?.InnerException?.GetType().Name ?? "unknown"),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
     private bool IsPropagated(Exception exception) => this.propagated.Any(type => type.IsInstanceOfType(exception));
+
+    private bool IsRefusable(Exception exception, CancellationToken cancellationToken) =>
+        !this.IsPropagated(exception) && (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested);
 
     private Entry Get(string agentId)
     {
@@ -319,9 +399,13 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
         }
     }
 
-    private sealed class Entry(AgentRegistration registration)
+    private sealed class Entry(string agentId, IAgentDescriptor descriptor, AgentRegistration registration)
     {
         private int phase = (int)AgentLifecyclePhase.Registered;
+
+        public string AgentId { get; } = agentId;
+
+        public IAgentDescriptor Descriptor { get; } = descriptor;
 
         public AgentRegistration Registration { get; } = registration;
 
@@ -329,7 +413,5 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
 
         public bool TryMove(AgentLifecyclePhase from, AgentLifecyclePhase to) =>
             Interlocked.CompareExchange(ref this.phase, (int)to, (int)from) == (int)from;
-
-        public void MoveTo(AgentLifecyclePhase to) => Interlocked.Exchange(ref this.phase, (int)to);
     }
 }

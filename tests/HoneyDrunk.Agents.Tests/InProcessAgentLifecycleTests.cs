@@ -150,7 +150,6 @@ public sealed class InProcessAgentLifecycleTests
         Assert.Throws<ObjectDisposedException>(() => context.Memory);
         var operation = Assert.Single(fixture.ContextFactory.Operations);
         Assert.True(operation.IsSuccess);
-        Assert.True(operation.Disposed);
     }
 
     /// <summary>An agent can use its tools and memory while it runs.</summary>
@@ -326,7 +325,101 @@ public sealed class InProcessAgentLifecycleTests
         Assert.Equal("corr-1", asked.Attributes["correlationId"]);
     }
 
+    /// <summary>A breaker that fails before the run refuses with a code instead of escaping.</summary>
+    [Fact]
+    public async Task Breaker_failure_before_run_refuses_with_gate_error()
+    {
+        using var fixture = new LifecycleFixture();
+        var agent = await fixture.ReadyAsync();
+        fixture.Breaker.Throw = new InvalidOperationException(Sentinel);
+
+        var result = await fixture.Lifecycle.ExecuteAsync(InvokerFixture.AgentId, LifecycleFixture.Request(), LifecycleFixture.ExecutionOptions());
+
+        Assert.Equal(AgentOutcome.Failed, result.Outcome);
+        Assert.Equal("gate_error", result.ReasonCode);
+        Assert.Equal(0, agent.Runs);
+    }
+
+    /// <summary>The registered id is used even if the agent's descriptor changes later.</summary>
+    [Fact]
+    public async Task Execution_uses_the_registered_id()
+    {
+        using var fixture = new LifecycleFixture();
+        var agent = new ShiftingAgent();
+        fixture.Lifecycle.Register(new AgentRegistration(agent, AgentGrants.None, []));
+        await fixture.Lifecycle.InitializeAsync(InvokerFixture.AgentId);
+        await fixture.Breaker.TripAsync("agent:" + InvokerFixture.AgentId, "test");
+        agent.Shift();
+
+        var result = await fixture.Lifecycle.ExecuteAsync(InvokerFixture.AgentId, LifecycleFixture.Request(), LifecycleFixture.ExecutionOptions());
+
+        Assert.Equal(AgentOutcome.Halted, result.Outcome);
+    }
+
+    /// <summary>Out-of-range options are refused when the lifecycle is built.</summary>
+    /// <param name="which">The option to break.</param>
+    [Theory]
+    [InlineData("calls")]
+    [InlineData("timeout")]
+    [InlineData("ttl")]
+    public void Invalid_options_are_refused(string which)
+    {
+        Assert.Throws<ArgumentException>(() => new LifecycleFixture(options =>
+        {
+            switch (which)
+            {
+                case "calls":
+                    options.MaxToolCallsPerExecution = 0;
+                    break;
+                case "timeout":
+                    options.ExecutionTimeout = TimeSpan.FromSeconds(-1);
+                    break;
+                default:
+                    options.ToolApprovalTtl = TimeSpan.Zero;
+                    break;
+            }
+        }));
+    }
+
+    /// <summary>Decommissioning twice notifies once.</summary>
+    [Fact]
+    public async Task Decommission_twice_notifies_once()
+    {
+        using var fixture = new LifecycleFixture();
+        await fixture.ReadyAsync();
+
+        await fixture.Lifecycle.DecommissionAsync(InvokerFixture.AgentId);
+        await fixture.Lifecycle.DecommissionAsync(InvokerFixture.AgentId);
+
+        Assert.Single(fixture.Observer.Transitions, transition => transition.Transition == "decommission");
+    }
+
+    /// <summary>A null result fails the operation.</summary>
+    [Fact]
+    public async Task Null_result_fails_the_operation()
+    {
+        using var fixture = new LifecycleFixture();
+        await fixture.ReadyAsync(new TestAgent((_, _) => Task.FromResult<AgentResult>(null!)));
+
+        var result = await fixture.Lifecycle.ExecuteAsync(InvokerFixture.AgentId, LifecycleFixture.Request(), LifecycleFixture.ExecutionOptions());
+
+        Assert.Equal("agent_error", result.ReasonCode);
+        Assert.False(Assert.Single(fixture.ContextFactory.Operations).IsSuccess);
+    }
+
     private class StopException(string message = "stop") : Exception(message);
+
+    private sealed class ShiftingAgent : IAgent
+    {
+        private IAgentDescriptor descriptor = new AgentDescriptor(InvokerFixture.AgentId, "Shifting", "test", "1.0.0");
+
+        public IAgentDescriptor Descriptor => this.descriptor;
+
+        public void Shift() => this.descriptor = new AgentDescriptor("someone-else", "Shifting", "test", "1.0.0");
+
+        public Task<AgentResult> ExecuteAsync(IAgentExecutionContext context, AgentRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(new AgentResult(AgentOutcome.Completed, null, null, null));
+    }
 
     private sealed class HardStopException() : StopException("hard stop");
 

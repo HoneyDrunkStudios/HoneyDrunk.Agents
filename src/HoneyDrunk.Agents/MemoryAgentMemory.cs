@@ -17,6 +17,7 @@ internal sealed class MemoryAgentMemory : IAgentMemory, IDisposable
     private readonly ExecutionIdentity identity;
     private readonly ITelemetryActivityFactory telemetry;
     private readonly ILogger logger;
+    private readonly CancellationTokenSource lifetime = new();
     private int disposed;
 
     /// <summary>Initializes a new instance of the <see cref="MemoryAgentMemory"/> class.</summary>
@@ -42,7 +43,8 @@ internal sealed class MemoryAgentMemory : IAgentMemory, IDisposable
         ObjectDisposedException.ThrowIf(Volatile.Read(ref this.disposed) != 0, this);
         ArgumentNullException.ThrowIfNull(note);
         using var activity = this.Start("remember");
-        var entry = await this.store.WriteAsync(this.home, new NewMemoryEntry(note.Kind, note.Content, note.Tags), cancellationToken).ConfigureAwait(false);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.lifetime.Token);
+        var entry = await this.store.WriteAsync(this.home, new NewMemoryEntry(note.Kind, note.Content, note.Tags), linked.Token).ConfigureAwait(false);
         activity?.SetTag(AgentTelemetry.MemoryResultCountTag, 1);
         AgentLog.MemoryOperation(this.logger, this.identity.AgentId, "remember", 1);
         return this.Map(entry);
@@ -54,14 +56,23 @@ internal sealed class MemoryAgentMemory : IAgentMemory, IDisposable
         ObjectDisposedException.ThrowIf(Volatile.Read(ref this.disposed) != 0, this);
         ArgumentNullException.ThrowIfNull(recall);
         using var activity = this.Start("recall");
-        var entries = await this.store.ReadAsync(this.read, new MemoryQuery(recall.Limit, recall.Kind, recall.AllTags), cancellationToken).ConfigureAwait(false);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.lifetime.Token);
+        var entries = await this.store.ReadAsync(this.read, new MemoryQuery(recall.Limit, recall.Kind, recall.AllTags), linked.Token).ConfigureAwait(false);
         activity?.SetTag(AgentTelemetry.MemoryResultCountTag, entries.Count);
         AgentLog.MemoryOperation(this.logger, this.identity.AgentId, "recall", entries.Count);
         return entries.Select(this.Map).ToArray();
     }
 
     /// <inheritdoc />
-    public void Dispose() => Interlocked.Exchange(ref this.disposed, 1);
+    public void Dispose()
+    {
+        // An in-flight call is cancelled, so nothing is written after the execution ends.
+        if (Interlocked.Exchange(ref this.disposed, 1) == 0)
+        {
+            this.lifetime.Cancel();
+            this.lifetime.Dispose();
+        }
+    }
 
     private AgentMemoryItem Map(MemoryEntry entry) =>
         new(entry.Id, entry.Kind, entry.Content, entry.Tags, entry.WrittenAt, entry.Scope == this.home.Home);

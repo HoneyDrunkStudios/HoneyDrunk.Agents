@@ -10,6 +10,8 @@ using HoneyDrunk.Kernel.Abstractions.Identity;
 using HoneyDrunk.Kernel.Abstractions.Telemetry;
 using HoneyDrunk.Kernel.AgentsInterop;
 using HoneyDrunk.Kernel.Context;
+using HoneyDrunk.Kernel.Hosting;
+using HoneyDrunk.Kernel.Telemetry;
 using HoneyDrunk.Memory;
 using HoneyDrunk.Memory.Abstractions;
 using HoneyDrunk.Memory.Providers.InMemory;
@@ -40,12 +42,12 @@ internal sealed class CanaryGrid : IDisposable
 
     private readonly ServiceProvider provider;
 
-    public CanaryGrid()
+    public CanaryGrid(bool kernelHost = false)
     {
         var grid = new GridContext("agents-canary", "test-studio", "test");
         grid.Initialize("corr-canary", tenantId: Tenant);
         this.GridContext = grid;
-        var accessor = new TestGridContextAccessor(grid);
+        IGridContextAccessor accessor = kernelHost ? new ScopedGridContextAccessor() : new TestGridContextAccessor(grid);
         var telemetry = new NullTelemetryActivityFactory();
         var policy = new DefaultAuthorizationPolicy(telemetry, this.Audit, accessor, NullLogger<DefaultAuthorizationPolicy>.Instance);
         var time = TimeProvider.System;
@@ -59,9 +61,25 @@ internal sealed class CanaryGrid : IDisposable
         var store = new ScopeCheckedMemoryStore(new InMemoryMemoryStore(time), nameof(InMemoryMemoryStore), telemetry, time, NullLogger<ScopeCheckedMemoryStore>.Instance);
 
         var services = new ServiceCollection();
-        services.AddSingleton<IGridContextAccessor>(accessor);
-        services.AddSingleton<IAgentExecutionContextFactory>(new ProjectingContextFactory());
-        services.AddSingleton<ITelemetryActivityFactory>(telemetry);
+        if (kernelHost)
+        {
+            // A background host: Kernel's own registrations, with the AsyncLocal accessor in place of the HTTP one.
+            services.AddHoneyDrunkNode(options =>
+            {
+                options.NodeId = new NodeId("agents-canary");
+                options.SectorId = new SectorId("ai");
+                options.EnvironmentId = new EnvironmentId("development");
+                options.StudioId = "test-studio";
+            }).AddTelemetry();
+            services.AddSingleton(accessor);
+        }
+        else
+        {
+            services.AddSingleton(accessor);
+            services.AddSingleton<IAgentExecutionContextFactory>(new ProjectingContextFactory());
+            services.AddSingleton<ITelemetryActivityFactory>(telemetry);
+        }
+
         services.AddSingleton<ICapabilityRegistry>(registry);
         services.AddSingleton<ICapabilityInvoker>(invoker);
         services.AddSingleton<IMemoryScopeResolver>(resolver);
@@ -86,6 +104,8 @@ internal sealed class CanaryGrid : IDisposable
     public InMemoryApprovalGate Gate { get; } = new();
 
     public IAgentLifecycle Lifecycle { get; }
+
+    public IServiceProvider Services => this.provider;
 
     public static JsonElement Json(string json)
     {

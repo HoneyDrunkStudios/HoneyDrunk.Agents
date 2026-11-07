@@ -13,6 +13,8 @@ internal sealed class ScriptedApprovalGate : IApprovalGate
 
     public Exception? Throw { get; set; }
 
+    public TaskCompletionSource? Hold { get; set; }
+
     public IReadOnlyList<ApprovalRequest> Received
     {
         get
@@ -26,7 +28,7 @@ internal sealed class ScriptedApprovalGate : IApprovalGate
 
     public void Decide(string approvalId, ApprovalOutcome outcome) => this.decisions[approvalId] = outcome;
 
-    public Task<ApprovalDecision> RequestAsync(ApprovalRequest request, CancellationToken cancellationToken = default)
+    public async Task<ApprovalDecision> RequestAsync(ApprovalRequest request, CancellationToken cancellationToken = default)
     {
         if (this.Throw is not null)
         {
@@ -38,8 +40,14 @@ internal sealed class ScriptedApprovalGate : IApprovalGate
             this.received.Add(request);
         }
 
+        if (this.Hold is not null)
+        {
+            // Ignores cancellation on purpose: a slow gate that answers after the execution ended.
+            await this.Hold.Task.ConfigureAwait(false);
+        }
+
         this.decisions[request.ApprovalId] = this.DefaultOutcome;
-        return Task.FromResult(new ApprovalDecision(request.ApprovalId, this.DefaultOutcome, "scripted", DateTimeOffset.UnixEpoch, null));
+        return new ApprovalDecision(request.ApprovalId, this.DefaultOutcome, "scripted", DateTimeOffset.UnixEpoch, null);
     }
 
     public Task<ApprovalDecision?> CheckStatusAsync(string approvalId, CancellationToken cancellationToken = default) =>

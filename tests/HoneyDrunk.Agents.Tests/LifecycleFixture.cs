@@ -6,7 +6,6 @@ using HoneyDrunk.Kernel.Abstractions.Context;
 using HoneyDrunk.Kernel.Abstractions.Telemetry;
 using HoneyDrunk.Memory.Abstractions;
 using HoneyDrunk.Operator.Abstractions;
-using HoneyDrunk.Operator.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;
 
@@ -51,7 +50,7 @@ internal sealed class LifecycleFixture : IDisposable
 
     public RecordingCapabilityHandler Handler { get; } = new(CapabilityResult.Success(InvokerFixture.Json("""{"ok":true}""")));
 
-    public InMemoryCircuitBreaker Breaker { get; } = new();
+    public TestBreaker Breaker { get; } = new();
 
     public ScriptedDecisionPolicy Policy { get; } = new();
 

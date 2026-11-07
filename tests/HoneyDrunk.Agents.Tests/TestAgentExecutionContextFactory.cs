@@ -6,9 +6,9 @@ namespace HoneyDrunk.Agents.Tests;
 /// <summary>Creates Kernel agent contexts with a recorded operation context.</summary>
 internal sealed class TestAgentExecutionContextFactory : IAgentExecutionContextFactory
 {
-    private readonly List<TestOperationContext> operations = [];
+    private readonly List<IOperationContext> operations = [];
 
-    public IReadOnlyList<TestOperationContext> Operations
+    public IReadOnlyList<IOperationContext> Operations
     {
         get
         {
@@ -21,7 +21,7 @@ internal sealed class TestAgentExecutionContextFactory : IAgentExecutionContextF
 
     public IAgentExecutionContext Create(IAgentDescriptor agent, IGridContext gridContext, IOperationContext? operationContext = null, IReadOnlyDictionary<string, object?>? executionMetadata = null)
     {
-        var operation = operationContext as TestOperationContext ?? new TestOperationContext(gridContext, "Agent:" + agent.AgentId);
+        var operation = operationContext ?? new TestOperationContext(gridContext, "Agent:" + agent.AgentId);
         lock (this.operations)
         {
             this.operations.Add(operation);

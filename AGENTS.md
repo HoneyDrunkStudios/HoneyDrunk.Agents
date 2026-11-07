@@ -17,7 +17,7 @@ The contract-shape canary (`Category=ContractShape`) freezes `IAgent`, `IAgentEx
 HONEYDRUNK_UPDATE_CONTRACT_SHAPE=1 dotnet test tests/HoneyDrunk.Agents.Abstractions.Tests -c Release --filter Category=ContractShape
 ```
 
-`tests/HoneyDrunk.Agents.Canary` runs the runtime against the real Kernel grid context and agent-context projection, the real Capabilities runtime and Auth guard, the real Memory runtime, and HoneyDrunk.Auth's `DefaultAuthorizationPolicy`.
+`tests/HoneyDrunk.Agents.Canary` runs the runtime under Kernel's real `AddHoneyDrunkNode` registration (as a background host) and against the real Kernel grid context and agent-context projection, the real Capabilities runtime and Auth guard, the real Memory runtime, and HoneyDrunk.Auth's `DefaultAuthorizationPolicy`.
 
 ## Boundaries
 

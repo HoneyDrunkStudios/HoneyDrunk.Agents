@@ -116,6 +116,21 @@ public sealed class MemoryAgentMemoryTests
         Assert.DoesNotContain(fixture.Log.Entries, entry => entry.message.Contains(Sentinel, StringComparison.Ordinal));
     }
 
+    /// <summary>Disposal cancels a memory call still in flight.</summary>
+    [Fact]
+    public async Task Dispose_cancels_an_in_flight_memory_call()
+    {
+        var fixture = new MemoryFixture();
+        var home = fixture.Resolver.ResolveAgentScope(new MemoryScopeKey(MemoryFixture.Tenant, MemoryFixture.ProjectA, InvokerFixture.AgentId), new MemoryCaller("agent:" + InvokerFixture.AgentId, [], []));
+        var identity = new ExecutionIdentity(InvokerFixture.AgentId, "exec-1", "corr-1", AgentGrants.None, []);
+        var memory = new MemoryAgentMemory(new WaitingStore(), home, home, identity, fixture.Telemetry, fixture.Log);
+
+        var write = memory.RememberAsync(new AgentMemoryNote("note", "late", []));
+        memory.Dispose();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => write);
+    }
+
     /// <summary>Using memory after its execution ends throws.</summary>
     [Fact]
     public async Task Use_after_dispose_throws()

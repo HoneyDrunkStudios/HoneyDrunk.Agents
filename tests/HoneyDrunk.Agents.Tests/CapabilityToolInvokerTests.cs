@@ -229,6 +229,9 @@ public sealed class CapabilityToolInvokerTests
 
             Assert.Single(results, result => result.Status == ToolCallStatus.Succeeded);
             Assert.Single(fixture.Handler.Invocations);
+
+            // The first request, plus one fresh request for the losers; never one per loser.
+            Assert.Equal(2, fixture.Gate.Received.Count);
         }
         finally
         {
@@ -266,8 +269,8 @@ public sealed class CapabilityToolInvokerTests
         var fixture = new InvokerFixture();
         var expiry = fixture.Time.GetUtcNow().AddHours(1);
 
-        var first = new ToolApprovalLedger(fixture.Time).Open("tool-key", expiry);
-        var second = new ToolApprovalLedger(fixture.Time).Open("tool-key", expiry);
+        var first = new ToolApprovalLedger(fixture.Time).GetOrOpen("tool-key", expiry).approvalId;
+        var second = new ToolApprovalLedger(fixture.Time).GetOrOpen("tool-key", expiry).approvalId;
 
         Assert.NotEqual(first, second);
         Assert.StartsWith("tool-key-", first, StringComparison.Ordinal);
@@ -277,17 +280,88 @@ public sealed class CapabilityToolInvokerTests
     [Fact]
     public void Request_key_is_stable_and_argument_order_insensitive()
     {
+        var ledger = new ToolApprovalLedger(TimeProvider.System);
         var key = new CapabilityKey("test-tool", "1.0.0");
 
-        var one = ToolRequestKey.For("agent-1", key, InvokerFixture.Json("""{"a":1,"b":{"c":2,"d":[3,{"f":1,"e":2}]}}"""));
-        var two = ToolRequestKey.For("agent-1", key, InvokerFixture.Json("""{ "b": {"d":[3,{"e":2,"f":1}],"c":2}, "a":1 }"""));
-        var other = ToolRequestKey.For("agent-1", key, InvokerFixture.Json("""{"a":2,"b":{"c":2,"d":[3,{"f":1,"e":2}]}}"""));
-        var otherAgent = ToolRequestKey.For("agent-2", key, InvokerFixture.Json("""{"a":1,"b":{"c":2,"d":[3,{"f":1,"e":2}]}}"""));
+        var one = ledger.RequestKeyFor("agent-1", key, InvokerFixture.Json("""{"a":1,"b":{"c":2,"d":[3,{"f":1,"e":2}]}}"""));
+        var two = ledger.RequestKeyFor("agent-1", key, InvokerFixture.Json("""{ "b": {"d":[3,{"e":2,"f":1}],"c":2}, "a":1 }"""));
+        var other = ledger.RequestKeyFor("agent-1", key, InvokerFixture.Json("""{"a":2,"b":{"c":2,"d":[3,{"f":1,"e":2}]}}"""));
+        var otherAgent = ledger.RequestKeyFor("agent-2", key, InvokerFixture.Json("""{"a":1,"b":{"c":2,"d":[3,{"f":1,"e":2}]}}"""));
 
         Assert.Equal(one, two);
         Assert.NotEqual(one, other);
         Assert.NotEqual(one, otherAgent);
         Assert.Matches("^tool-[0-9a-f]{32}$", one);
+    }
+
+    /// <summary>Request keys are keyed per host, so they cannot be precomputed from guessed arguments.</summary>
+    [Fact]
+    public void Request_keys_differ_between_hosts()
+    {
+        var key = new CapabilityKey("test-tool", "1.0.0");
+        var arguments = InvokerFixture.Json("""{"amount":5}""");
+
+        var one = new ToolApprovalLedger(TimeProvider.System).RequestKeyFor("agent-1", key, arguments);
+        var two = new ToolApprovalLedger(TimeProvider.System).RequestKeyFor("agent-1", key, arguments);
+
+        Assert.NotEqual(one, two);
+    }
+
+    /// <summary>Concurrent first proposals of one call raise exactly one approval request.</summary>
+    [Fact]
+    public async Task Concurrent_first_proposals_raise_one_request()
+    {
+        var fixture = new InvokerFixture();
+        fixture.Policy.Outcome = PolicyOutcome.RequireApproval;
+        var invokers = Enumerable.Range(1, 8).Select(index => fixture.Create("exec-" + index)).ToArray();
+        try
+        {
+            var results = await Task.WhenAll(invokers.Select(invoker => Task.Run(() => invoker.InvokeAsync(InvokerFixture.Call()))));
+
+            Assert.Single(fixture.Gate.Received);
+            Assert.All(results, result => Assert.Equal(fixture.Gate.Received[0].ApprovalId, result.ApprovalId));
+        }
+        finally
+        {
+            foreach (var invoker in invokers)
+            {
+                invoker.Dispose();
+            }
+        }
+    }
+
+    /// <summary>An approval that arrives after the execution ended never dispatches.</summary>
+    [Fact]
+    public async Task Approval_after_dispose_never_dispatches()
+    {
+        var fixture = new InvokerFixture();
+        fixture.Policy.Outcome = PolicyOutcome.RequireApproval;
+        fixture.Gate.DefaultOutcome = ApprovalOutcome.Approved;
+        fixture.Gate.Hold = new TaskCompletionSource();
+        var invoker = fixture.Create();
+
+        var call = invoker.InvokeAsync(InvokerFixture.Call());
+        invoker.Dispose();
+        fixture.Gate.Hold.SetResult();
+
+        await Assert.ThrowsAnyAsync<Exception>(() => call);
+        Assert.Empty(fixture.Handler.Invocations);
+    }
+
+    /// <summary>A host stop exception thrown by an Operator check reaches the caller unchanged.</summary>
+    [Fact]
+    public async Task Listed_stop_exception_from_operator_propagates()
+    {
+        var fixture = new InvokerFixture();
+        fixture.Options.PropagatedExceptionTypes.Add(typeof(TimeoutException));
+        var stop = new TimeoutException("stop");
+        fixture.Policy.Throw = stop;
+        using var invoker = fixture.Create();
+
+        var thrown = await Assert.ThrowsAsync<TimeoutException>(() => invoker.InvokeAsync(InvokerFixture.Call()));
+
+        Assert.Same(stop, thrown);
+        Assert.Empty(fixture.Handler.Invocations);
     }
 
     /// <summary>An Operator failure fails closed without dispatch.</summary>

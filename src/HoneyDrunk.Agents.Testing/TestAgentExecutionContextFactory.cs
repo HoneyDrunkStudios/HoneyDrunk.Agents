@@ -4,15 +4,15 @@ using HoneyDrunk.Kernel.Abstractions.Context;
 namespace HoneyDrunk.Agents.Testing;
 
 /// <summary>
-/// Creates Kernel agent contexts with a fixed start time and a recorded <see cref="TestOperationContext"/>. It is the
+/// Creates Kernel agent contexts with a fixed start time and records each operation context it is given or creates. It is the
 /// deterministic clock hook for executions run through the harness.
 /// </summary>
 public sealed class TestAgentExecutionContextFactory : IAgentExecutionContextFactory
 {
-    private readonly List<TestOperationContext> operations = [];
+    private readonly List<IOperationContext> operations = [];
 
     /// <summary>Gets the operation contexts created, in order.</summary>
-    public IReadOnlyList<TestOperationContext> Operations
+    public IReadOnlyList<IOperationContext> Operations
     {
         get
         {
@@ -34,15 +34,15 @@ public sealed class TestAgentExecutionContextFactory : IAgentExecutionContextFac
             this.Record(created);
             operationContext = created;
         }
-        else if (operationContext is TestOperationContext given)
+        else
         {
-            this.Record(given);
+            this.Record(operationContext);
         }
 
         return new TestKernelAgentContext(agent, gridContext, operationContext, executionMetadata);
     }
 
-    private void Record(TestOperationContext operation)
+    private void Record(IOperationContext operation)
     {
         lock (this.operations)
         {

@@ -31,6 +31,7 @@ internal sealed class AgentExecutionContext : IAgentExecutionContext, IDisposabl
         ArgumentNullException.ThrowIfNull(identity);
         this.tools = tools ?? throw new ArgumentNullException(nameof(tools));
         this.memory = memory ?? throw new ArgumentNullException(nameof(memory));
+        this.AgentIdForLogs = identity.AgentId;
         this.ExecutionId = identity.ExecutionId;
         this.Grants = identity.Grants;
         this.ToolBindings = identity.Bindings;
@@ -79,6 +80,9 @@ internal sealed class AgentExecutionContext : IAgentExecutionContext, IDisposabl
 
     /// <inheritdoc />
     public IReadOnlyDictionary<string, object?> ExecutionMetadata => this.inner.ExecutionMetadata;
+
+    /// <summary>Gets the registered agent id, which never changes during the execution.</summary>
+    internal string AgentIdForLogs { get; }
 
     /// <inheritdoc />
     public void AddMetadata(string key, object? value) => this.inner.AddMetadata(key, value);
