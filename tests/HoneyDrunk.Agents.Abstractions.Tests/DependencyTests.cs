@@ -19,5 +19,5 @@ public sealed class DependencyTests
     /// <summary>The context preserves the original Kernel execution contract.</summary>
     [Fact]
     public void ExecutionContext_Extends_KernelContext() =>
-        Assert.Contains(typeof(Kernel.Abstractions.Agents.IAgentExecutionContext), typeof(IAgentExecutionContext).GetInterfaces());
+        Assert.Contains(typeof(Kernel.Abstractions.Agents.IAgentExecutionContext), typeof(IAgentRunContext).GetInterfaces());
 }

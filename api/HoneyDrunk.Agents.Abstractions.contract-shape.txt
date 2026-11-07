@@ -1,6 +1,6 @@
 # package: HoneyDrunk.Agents.Abstractions
 # version: 0.1.0
-# roots: HoneyDrunk.Agents.Abstractions.IAgent, HoneyDrunk.Agents.Abstractions.IAgentExecutionContext, HoneyDrunk.Agents.Abstractions.IAgentMemory, HoneyDrunk.Agents.Abstractions.IToolInvoker
+# roots: HoneyDrunk.Agents.Abstractions.IAgent, HoneyDrunk.Agents.Abstractions.IAgentMemory, HoneyDrunk.Agents.Abstractions.IAgentRunContext, HoneyDrunk.Agents.Abstractions.IToolInvoker
 HoneyDrunk.Agents.Abstractions.AgentGrants = sealed record class : System.IEquatable<HoneyDrunk.Agents.Abstractions.AgentGrants>
 HoneyDrunk.Agents.Abstractions.AgentGrants ctor(System.Collections.Generic.IReadOnlyList<System.String> Scopes, System.Collections.Generic.IReadOnlyList<System.String> Roles)
 HoneyDrunk.Agents.Abstractions.AgentGrants method: HoneyDrunk.Agents.Abstractions.AgentGrants Narrow(HoneyDrunk.Agents.Abstractions.AgentGrants? narrowing)
@@ -51,17 +51,17 @@ HoneyDrunk.Agents.Abstractions.AgentToolBinding ctor(System.String Name, System.
 HoneyDrunk.Agents.Abstractions.AgentToolBinding property: System.String Name { get; }
 HoneyDrunk.Agents.Abstractions.AgentToolBinding property: System.String Version { get; }
 HoneyDrunk.Agents.Abstractions.IAgent = interface
-HoneyDrunk.Agents.Abstractions.IAgent method: System.Threading.Tasks.Task<HoneyDrunk.Agents.Abstractions.AgentResult> ExecuteAsync(HoneyDrunk.Agents.Abstractions.IAgentExecutionContext context, HoneyDrunk.Agents.Abstractions.AgentRequest request, System.Threading.CancellationToken cancellationToken)
+HoneyDrunk.Agents.Abstractions.IAgent method: System.Threading.Tasks.Task<HoneyDrunk.Agents.Abstractions.AgentResult> ExecuteAsync(HoneyDrunk.Agents.Abstractions.IAgentRunContext context, HoneyDrunk.Agents.Abstractions.AgentRequest request, System.Threading.CancellationToken cancellationToken)
 HoneyDrunk.Agents.Abstractions.IAgent property: HoneyDrunk.Kernel.Abstractions.Agents.IAgentDescriptor Descriptor { get; }
-HoneyDrunk.Agents.Abstractions.IAgentExecutionContext = interface : HoneyDrunk.Kernel.Abstractions.Agents.IAgentExecutionContext
-HoneyDrunk.Agents.Abstractions.IAgentExecutionContext property: HoneyDrunk.Agents.Abstractions.AgentGrants Grants { get; }
-HoneyDrunk.Agents.Abstractions.IAgentExecutionContext property: HoneyDrunk.Agents.Abstractions.IAgentMemory Memory { get; }
-HoneyDrunk.Agents.Abstractions.IAgentExecutionContext property: HoneyDrunk.Agents.Abstractions.IToolInvoker Tools { get; }
-HoneyDrunk.Agents.Abstractions.IAgentExecutionContext property: System.Collections.Generic.IReadOnlyList<HoneyDrunk.Agents.Abstractions.AgentToolBinding> ToolBindings { get; }
-HoneyDrunk.Agents.Abstractions.IAgentExecutionContext property: System.String ExecutionId { get; }
 HoneyDrunk.Agents.Abstractions.IAgentMemory = interface
 HoneyDrunk.Agents.Abstractions.IAgentMemory method: System.Threading.Tasks.Task<HoneyDrunk.Agents.Abstractions.AgentMemoryItem> RememberAsync(HoneyDrunk.Agents.Abstractions.AgentMemoryNote note, System.Threading.CancellationToken cancellationToken = default)
 HoneyDrunk.Agents.Abstractions.IAgentMemory method: System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<HoneyDrunk.Agents.Abstractions.AgentMemoryItem>> RecallAsync(HoneyDrunk.Agents.Abstractions.AgentRecall recall, System.Threading.CancellationToken cancellationToken = default)
+HoneyDrunk.Agents.Abstractions.IAgentRunContext = interface : HoneyDrunk.Kernel.Abstractions.Agents.IAgentExecutionContext
+HoneyDrunk.Agents.Abstractions.IAgentRunContext property: HoneyDrunk.Agents.Abstractions.AgentGrants Grants { get; }
+HoneyDrunk.Agents.Abstractions.IAgentRunContext property: HoneyDrunk.Agents.Abstractions.IAgentMemory Memory { get; }
+HoneyDrunk.Agents.Abstractions.IAgentRunContext property: HoneyDrunk.Agents.Abstractions.IToolInvoker Tools { get; }
+HoneyDrunk.Agents.Abstractions.IAgentRunContext property: System.Collections.Generic.IReadOnlyList<HoneyDrunk.Agents.Abstractions.AgentToolBinding> ToolBindings { get; }
+HoneyDrunk.Agents.Abstractions.IAgentRunContext property: System.String ExecutionId { get; }
 HoneyDrunk.Agents.Abstractions.IToolInvoker = interface
 HoneyDrunk.Agents.Abstractions.IToolInvoker method: System.Threading.Tasks.Task<HoneyDrunk.Agents.Abstractions.ToolCallResult> InvokeAsync(HoneyDrunk.Agents.Abstractions.ToolCall call, System.Threading.CancellationToken cancellationToken = default)
 HoneyDrunk.Agents.Abstractions.ToolCall = sealed record class : System.IEquatable<HoneyDrunk.Agents.Abstractions.ToolCall>

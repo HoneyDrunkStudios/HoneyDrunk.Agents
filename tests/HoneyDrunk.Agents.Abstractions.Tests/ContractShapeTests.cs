@@ -9,7 +9,7 @@ public sealed class ContractShapeTests
 {
     private const string BaselineFile = "HoneyDrunk.Agents.Abstractions.contract-shape.txt";
     private const string UpdateVariable = "HONEYDRUNK_UPDATE_CONTRACT_SHAPE";
-    private static readonly Type[] Roots = [typeof(IAgent), typeof(IAgentExecutionContext), typeof(IToolInvoker), typeof(IAgentMemory)];
+    private static readonly Type[] Roots = [typeof(IAgent), typeof(IAgentRunContext), typeof(IToolInvoker), typeof(IAgentMemory)];
 
     /// <summary>The four frozen contracts match the committed shape.</summary>
     [Fact]

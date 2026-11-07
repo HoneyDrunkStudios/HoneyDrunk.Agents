@@ -1,7 +1,7 @@
 namespace HoneyDrunk.Agents.Abstractions;
 
 /// <summary>Extends the Kernel context with the resources granted to one execution.</summary>
-public interface IAgentExecutionContext : Kernel.Abstractions.Agents.IAgentExecutionContext
+public interface IAgentRunContext : Kernel.Abstractions.Agents.IAgentExecutionContext
 {
     /// <summary>Gets the execution identifier.</summary>
     string ExecutionId { get; }

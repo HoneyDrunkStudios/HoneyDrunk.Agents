@@ -124,7 +124,7 @@ public sealed class AgentRecordTests
     {
         public IAgentDescriptor Descriptor { get; } = new AgentDescriptor("example", "Worker", "automation", "1.0.0");
 
-        public Task<AgentResult> ExecuteAsync(IAgentExecutionContext context, AgentRequest request, CancellationToken cancellationToken) =>
+        public Task<AgentResult> ExecuteAsync(IAgentRunContext context, AgentRequest request, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }
 }
