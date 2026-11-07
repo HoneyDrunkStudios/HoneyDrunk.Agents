@@ -1,0 +1,5 @@
+# Changelog
+
+## [0.1.0]
+
+- First release: the agent, execution context, tool invoker, agent memory and lifecycle contracts, with a contract-shape canary.

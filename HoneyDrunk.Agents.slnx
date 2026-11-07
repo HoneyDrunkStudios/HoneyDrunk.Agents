@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/HoneyDrunk.Agents.Abstractions/HoneyDrunk.Agents.Abstractions.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/HoneyDrunk.Agents.Abstractions.Tests/HoneyDrunk.Agents.Abstractions.Tests.csproj" />
+  </Folder>
+</Solution>
