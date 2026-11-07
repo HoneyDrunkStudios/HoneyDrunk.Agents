@@ -17,6 +17,7 @@ public sealed class AgentRecordTests
     [InlineData("-leading")]
     [InlineData("has space")]
     [InlineData("a/b")]
+    [InlineData("agent\n")]
     [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
     public void Descriptor_rejects_bad_agent_ids(string agentId)
     {

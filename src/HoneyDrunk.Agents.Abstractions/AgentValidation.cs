@@ -90,6 +90,6 @@ internal static partial class AgentValidation
     internal static JsonElement? Optional(JsonElement? element) =>
         element is { ValueKind: not JsonValueKind.Undefined } value ? value.Clone() : element;
 
-    [GeneratedRegex("^[a-z0-9][a-z0-9._-]{0,63}$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    [GeneratedRegex(@"\A[a-z0-9][a-z0-9._-]{0,63}\z", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex AgentIdPattern();
 }
