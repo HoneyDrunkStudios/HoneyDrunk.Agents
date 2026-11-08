@@ -261,8 +261,8 @@ public sealed class CapabilityToolInvokerTests
         var fixture = new InvokerFixture();
         var expiry = fixture.Time.GetUtcNow().AddHours(1);
 
-        var first = new ToolApprovalLedger(fixture.Time).GetOrOpen("tool-key", expiry).approvalId;
-        var second = new ToolApprovalLedger(fixture.Time).GetOrOpen("tool-key", expiry).approvalId;
+        var first = new ToolApprovalLedger(fixture.Time).GetOrOpen(MemoryFixture.Tenant, "tool-key", expiry).approvalId;
+        var second = new ToolApprovalLedger(fixture.Time).GetOrOpen(MemoryFixture.Tenant, "tool-key", expiry).approvalId;
 
         Assert.NotEqual(first, second);
         Assert.StartsWith("tool-key-", first, StringComparison.Ordinal);
@@ -480,7 +480,7 @@ public sealed class CapabilityToolInvokerTests
     public void Expired_approval_is_not_consumed()
     {
         var fixture = new InvokerFixture();
-        var (approvalId, _) = fixture.Ledger.GetOrOpen("tool-key", fixture.Time.GetUtcNow().AddMinutes(1));
+        var (approvalId, _) = fixture.Ledger.GetOrOpen(MemoryFixture.Tenant, "tool-key", fixture.Time.GetUtcNow().AddMinutes(1));
         fixture.Time.Advance(TimeSpan.FromMinutes(2));
 
         Assert.False(fixture.Ledger.TryConsume("tool-key", approvalId!));
@@ -530,15 +530,35 @@ public sealed class CapabilityToolInvokerTests
         var fixture = new InvokerFixture();
         var ledger = new ToolApprovalLedger(fixture.Time, capacity: 2);
         var expiry = fixture.Time.GetUtcNow().AddHours(1);
-        ledger.GetOrOpen("key-1", expiry);
-        ledger.GetOrOpen("key-2", expiry);
+        ledger.GetOrOpen(MemoryFixture.Tenant, "key-1", expiry);
+        ledger.GetOrOpen(MemoryFixture.Tenant, "key-2", expiry);
 
-        var (third, opened) = ledger.GetOrOpen("key-3", expiry);
+        var (third, opened) = ledger.GetOrOpen(MemoryFixture.Tenant, "key-3", expiry);
 
         Assert.Null(third);
         Assert.False(opened);
         Assert.NotNull(ledger.OpenApprovalFor("key-1"));
         Assert.NotNull(ledger.OpenApprovalFor("key-2"));
+    }
+
+    /// <summary>One tenant filling its share never blocks another tenant.</summary>
+    [Fact]
+    public void One_tenant_cannot_exhaust_another_tenants_approvals()
+    {
+        var fixture = new InvokerFixture();
+        var ledger = new ToolApprovalLedger(fixture.Time, capacity: 4, perTenantCapacity: 2);
+        var tenantA = MemoryFixture.Tenant;
+        var tenantB = new TenantId("01JC0000000000000000000009");
+        var expiry = fixture.Time.GetUtcNow().AddHours(1);
+        ledger.GetOrOpen(tenantA, "a-1", expiry);
+        ledger.GetOrOpen(tenantA, "a-2", expiry);
+
+        var (blocked, _) = ledger.GetOrOpen(tenantA, "a-3", expiry);
+        var (allowed, opened) = ledger.GetOrOpen(tenantB, "b-1", expiry);
+
+        Assert.Null(blocked);
+        Assert.NotNull(allowed);
+        Assert.True(opened);
     }
 
     /// <summary>A full ledger frees expired entries before refusing.</summary>
@@ -547,10 +567,10 @@ public sealed class CapabilityToolInvokerTests
     {
         var fixture = new InvokerFixture();
         var ledger = new ToolApprovalLedger(fixture.Time, capacity: 1);
-        ledger.GetOrOpen("key-1", fixture.Time.GetUtcNow().AddMinutes(1));
+        ledger.GetOrOpen(MemoryFixture.Tenant, "key-1", fixture.Time.GetUtcNow().AddMinutes(1));
         fixture.Time.Advance(TimeSpan.FromMinutes(2));
 
-        var (second, opened) = ledger.GetOrOpen("key-2", fixture.Time.GetUtcNow().AddMinutes(1));
+        var (second, opened) = ledger.GetOrOpen(MemoryFixture.Tenant, "key-2", fixture.Time.GetUtcNow().AddMinutes(1));
 
         Assert.NotNull(second);
         Assert.True(opened);

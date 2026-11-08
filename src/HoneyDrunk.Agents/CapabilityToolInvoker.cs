@@ -189,7 +189,7 @@ internal sealed class CapabilityToolInvoker : IToolInvoker, IDisposable
     {
         activity?.SetTag(AgentTelemetry.GateKindTag, "approval");
         var requestKey = this.gates.Ledger.RequestKeyFor(this.identity.Tenant, this.identity.AgentId, key, arguments);
-        var (open, opened) = this.gates.Ledger.GetOrOpen(requestKey, this.Expiry());
+        var (open, opened) = this.gates.Ledger.GetOrOpen(this.identity.Tenant, requestKey, this.Expiry());
         if (open is null)
         {
             return Fail(ToolCallStatus.Failed, "approval_capacity");
@@ -220,7 +220,7 @@ internal sealed class CapabilityToolInvoker : IToolInvoker, IDisposable
             case null:
             default:
                 // Stale, unknown or already consumed: open a fresh approval, unless another call already did.
-                var (fresh, reopened) = this.gates.Ledger.Reopen(requestKey, open, this.Expiry());
+                var (fresh, reopened) = this.gates.Ledger.Reopen(this.identity.Tenant, requestKey, open, this.Expiry());
                 if (fresh is null)
                 {
                     return Fail(ToolCallStatus.Failed, "approval_capacity");
