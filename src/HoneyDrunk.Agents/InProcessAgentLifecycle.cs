@@ -357,6 +357,8 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
         try
         {
             // WaitAsync stops waiting at the deadline even when an agent ignores its token; the context is then disposed.
+            // WaitAsync does not check a completed task, so check the deadline before the agent starts.
+            deadline.ThrowIfCancellationRequested();
             running = admission.Entry.Registration.Agent.ExecuteAsync(context, request, deadline);
             var result = await running.WaitAsync(deadline).ConfigureAwait(false);
             if (result is null)

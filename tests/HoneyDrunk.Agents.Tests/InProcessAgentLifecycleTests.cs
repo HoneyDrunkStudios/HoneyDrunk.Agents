@@ -537,6 +537,20 @@ public sealed class InProcessAgentLifecycleTests
         Assert.Equal(AgentOutcome.Completed, afterwards.Outcome);
     }
 
+    /// <summary>An execution whose caller already cancelled never reaches the agent.</summary>
+    [Fact]
+    public async Task Already_cancelled_execution_never_runs_the_agent()
+    {
+        using var fixture = new LifecycleFixture();
+        var agent = await fixture.ReadyAsync();
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fixture.Lifecycle.ExecuteAsync(InvokerFixture.AgentId, LifecycleFixture.Request(), LifecycleFixture.ExecutionOptions(), cancellation.Token));
+
+        Assert.Equal(0, agent.Runs);
+    }
+
     private class StopException(string message = "stop") : Exception(message);
 
     private sealed class ShiftingAgent : IAgent
