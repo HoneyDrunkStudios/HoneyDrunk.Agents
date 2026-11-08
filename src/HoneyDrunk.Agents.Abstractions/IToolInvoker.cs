@@ -1,11 +1,14 @@
 namespace HoneyDrunk.Agents.Abstractions;
 
-/// <summary>Invokes tools through the execution's bindings and authorization checks.</summary>
+/// <summary>
+/// Calls a tool on an agent's behalf. The call must be in the agent's bindings, pass the operator's checks, and pass
+/// the capability node's authorization, in that order.
+/// </summary>
 public interface IToolInvoker
 {
-    /// <summary>Requests one exact capability invocation.</summary>
-    /// <param name="call">The capability key and arguments.</param>
-    /// <param name="cancellationToken">The call cancellation token.</param>
-    /// <returns>The invocation result.</returns>
+    /// <summary>Invokes a tool.</summary>
+    /// <param name="call">The proposed call.</param>
+    /// <param name="cancellationToken">Cancels the call.</param>
+    /// <returns>The result; failures are reported as a status and code, not thrown.</returns>
     Task<ToolCallResult> InvokeAsync(ToolCall call, CancellationToken cancellationToken = default);
 }

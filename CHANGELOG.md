@@ -1,8 +1,7 @@
 # Changelog
 
-## [0.1.0] Unreleased
+All notable changes to this repository are recorded here. Each package keeps its own changelog under `src/`.
 
-### Added
+## [0.1.0]
 
-- Define the agent, execution context, tool, memory, and lifecycle contracts.
-- Verify input boundaries and track the public shape of the four agent-facing contracts in CI.
+- First slice: agent contracts, the in-process runtime and the test harness (ADR-0020).

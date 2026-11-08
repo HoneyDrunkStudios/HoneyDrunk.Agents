@@ -1,24 +1,24 @@
+using System.Globalization;
+
 namespace HoneyDrunk.Agents.Abstractions;
 
-/// <summary>One note to write to the execution's home memory.</summary>
+/// <summary>Something an agent asks to remember. The memory node validates kind, content and tags.</summary>
 /// <param name="Kind">The entry kind.</param>
-/// <param name="Content">The entry content.</param>
-/// <param name="Tags">The entry tags.</param>
-public sealed record AgentMemoryNote(
-    string Kind,
-    string Content,
-    IReadOnlyList<string> Tags)
+/// <param name="Content">The content.</param>
+/// <param name="Tags">The tags.</param>
+public sealed record AgentMemoryNote(string Kind, string Content, IReadOnlyList<string> Tags)
 {
     /// <summary>Gets the entry kind.</summary>
-    public string Kind { get; } = AgentValidation.NonBlank(Kind, nameof(Kind));
+    public string Kind { get; } = Kind ?? throw new ArgumentNullException(nameof(Kind));
 
-    /// <summary>Gets the entry content.</summary>
-    public string Content { get; } = AgentValidation.NonBlank(Content, nameof(Content));
+    /// <summary>Gets the content.</summary>
+    public string Content { get; } = Content ?? throw new ArgumentNullException(nameof(Content));
 
-    /// <summary>Gets the entry tags.</summary>
-    public IReadOnlyList<string> Tags { get; } = AgentValidation.NonBlankList(Tags, nameof(Tags));
+    /// <summary>Gets a private copy of the tags.</summary>
+    public IReadOnlyList<string> Tags { get; } = AgentValidation.NoNulls(Tags, nameof(Tags));
 
-    /// <summary>Formats the record without including workload data.</summary>
-    /// <returns>The safe display text.</returns>
-    public override string ToString() => nameof(AgentMemoryNote);
+    /// <summary>Describes the note without its content or tags.</summary>
+    /// <returns>The kind, the content length and the tag count.</returns>
+    public override string ToString() =>
+        string.Create(CultureInfo.InvariantCulture, $"AgentMemoryNote {{ Kind = {this.Kind}, ContentLength = {this.Content.Length}, TagCount = {this.Tags.Count} }}");
 }

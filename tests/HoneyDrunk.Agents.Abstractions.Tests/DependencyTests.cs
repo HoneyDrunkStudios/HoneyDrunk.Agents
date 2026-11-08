@@ -2,22 +2,30 @@ using Xunit;
 
 namespace HoneyDrunk.Agents.Abstractions.Tests;
 
-/// <summary>Checks the dependency boundary of the consumer assembly.</summary>
+/// <summary>Dependency direction of the Abstractions package (ADR-0020 D2, invariants 131 and 136).</summary>
 public sealed class DependencyTests
 {
-    /// <summary>Only Kernel.Abstractions is allowed outside the framework.</summary>
+    /// <summary>The only HoneyDrunk reference is Kernel's Abstractions.</summary>
     [Fact]
-    public void Abstractions_References_OnlyFrameworkAndKernel()
+    public void Abstractions_reference_only_kernel_abstractions()
     {
-        var external = typeof(IAgent).Assembly.GetReferencedAssemblies()
-            .Select(reference => reference.Name)
-            .Where(name => name is not null && name != "netstandard" && !name.StartsWith("System.", StringComparison.Ordinal));
+        var honeyDrunkReferences = typeof(AgentDescriptor).Assembly
+            .GetReferencedAssemblies()
+            .Select(reference => reference.Name ?? string.Empty)
+            .Where(name => name.StartsWith("HoneyDrunk.", StringComparison.Ordinal))
+            .ToArray();
 
-        Assert.Equal("HoneyDrunk.Kernel.Abstractions", Assert.Single(external));
+        Assert.Equal(["HoneyDrunk.Kernel.Abstractions"], honeyDrunkReferences);
     }
 
-    /// <summary>The context preserves the original Kernel execution contract.</summary>
+    /// <summary>No AI runtime or sibling node assembly is referenced.</summary>
     [Fact]
-    public void ExecutionContext_Extends_KernelContext() =>
-        Assert.Contains(typeof(Kernel.Abstractions.Agents.IAgentExecutionContext), typeof(IAgentRunContext).GetInterfaces());
+    public void Abstractions_reference_no_ai_runtime()
+    {
+        string[] forbidden = ["Microsoft.Extensions.AI", "HoneyDrunk.AI", "HoneyDrunk.Capabilities", "HoneyDrunk.Memory", "HoneyDrunk.Operator"];
+
+        var references = typeof(AgentDescriptor).Assembly.GetReferencedAssemblies().Select(reference => reference.Name ?? string.Empty);
+
+        Assert.DoesNotContain(references, name => forbidden.Any(prefix => name.StartsWith(prefix, StringComparison.Ordinal)));
+    }
 }

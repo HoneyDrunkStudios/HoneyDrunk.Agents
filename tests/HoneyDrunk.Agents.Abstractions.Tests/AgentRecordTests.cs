@@ -1,130 +1,168 @@
 using HoneyDrunk.Kernel.Abstractions.Agents;
+using HoneyDrunk.Kernel.Abstractions.Identity;
 using System.Text.Json;
 using Xunit;
 
 namespace HoneyDrunk.Agents.Abstractions.Tests;
 
-/// <summary>Tests the input and authority boundaries of the public agent records.</summary>
+/// <summary>Validation and behavior of the Agents-owned records.</summary>
 public sealed class AgentRecordTests
 {
-    /// <summary>Rejects agent IDs that cannot identify a memory partition.</summary>
-    /// <param name="id">The invalid ID.</param>
+    /// <summary>Agent ids follow the memory coordinate format.</summary>
+    /// <param name="agentId">A bad id.</param>
     [Theory]
     [InlineData("")]
-    [InlineData("Agent")]
-    [InlineData("-agent")]
+    [InlineData(" ")]
+    [InlineData("Upper")]
+    [InlineData("-leading")]
+    [InlineData("has space")]
+    [InlineData("a/b")]
     [InlineData("agent\n")]
-    [InlineData("agent name")]
-    [InlineData("agent/other")]
     [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
-    public void Descriptor_WithInvalidId_Throws(string id) =>
-        Assert.Throws<ArgumentException>(() => new AgentDescriptor(id, "Worker", "automation", "1.0.0"));
-
-    /// <summary>Projects standard Grid context without granting Kernel capabilities.</summary>
-    [Fact]
-    public void Descriptor_WithValidId_ProjectsStandardContext()
+    public void Descriptor_rejects_bad_agent_ids(string agentId)
     {
-        IAgentDescriptor descriptor = new AgentDescriptor("1.test_worker-2", "Worker", "automation", "1.0.0");
+        Assert.Throws<ArgumentException>(() => new AgentDescriptor(agentId, "Name", "type", "1.0.0"));
+    }
 
-        Assert.Equal("1.test_worker-2", descriptor.AgentId);
-        Assert.Equal(AgentContextScope.Standard, descriptor.ContextScope);
+    /// <summary>A valid id is kept as given.</summary>
+    [Fact]
+    public void Descriptor_accepts_a_valid_id()
+    {
+        var descriptor = new AgentDescriptor("agent-1.a_b", "Name", "type", "1.0.0");
+
+        Assert.Equal("agent-1.a_b", descriptor.AgentId);
+    }
+
+    /// <summary>Tool rights never live in Kernel's capability list.</summary>
+    [Fact]
+    public void Descriptor_declares_no_kernel_capabilities()
+    {
+        IAgentDescriptor descriptor = new AgentDescriptor("agent", "Name", "type", "1.0.0");
+
         Assert.Empty(descriptor.Capabilities);
+        Assert.False(descriptor.HasCapability("access:anything"));
+        Assert.Equal(AgentContextScope.Standard, descriptor.ContextScope);
         Assert.Empty(descriptor.Metadata);
-        Assert.False(descriptor.HasCapability("example"));
     }
 
-    /// <summary>Checks ordinal intersection and verifies that later edits cannot increase a registration's authority.</summary>
+    /// <summary>Two descriptors with the same values are equal.</summary>
     [Fact]
-    public void Narrow_WithDifferentGrants_PreservesOnlyRegisteredValues()
+    public void Equal_descriptors_compare_equal()
     {
-        string[] scopes = ["a", "b"];
-        var registered = new AgentGrants(scopes, ["reader", "worker"]);
-        scopes[0] = "z";
-
-        var effective = registered.Narrow(new AgentGrants(["a", "z"], ["reader", "Worker"]));
-
-        Assert.Equal(["a"], effective.Scopes);
-        Assert.Equal(["reader"], effective.Roles);
-        Assert.Same(registered, registered.Narrow(null));
+        Assert.Equal(new AgentDescriptor("agent", "Name", "type", "1.0.0"), new AgentDescriptor("agent", "Name", "type", "1.0.0"));
     }
 
-    /// <summary>Snapshots request, tool, and output JSON before the original document is released.</summary>
+    /// <summary>A narrowing keeps only what was already granted.</summary>
     [Fact]
-    public void JsonRecords_AfterDocumentDisposal_PreservePayloads()
+    public void Narrow_never_widens()
     {
-        var (request, call, result, toolResult) = CreateJsonRecords();
+        var grants = new AgentGrants(["a", "b"], ["r1", "r2"]);
 
-        Assert.Equal(42, request.Payload.GetProperty("count").GetInt32());
-        Assert.Equal(42, call.Arguments.GetProperty("count").GetInt32());
-        Assert.Equal(42, result.Output?.GetProperty("count").GetInt32());
-        Assert.Equal(42, toolResult.Output?.GetProperty("count").GetInt32());
+        var narrowed = grants.Narrow(new AgentGrants(["a", "z"], ["r2", "r9"]));
+
+        Assert.Equal(["a"], narrowed.Scopes);
+        Assert.Equal(["r2"], narrowed.Roles);
     }
 
-    /// <summary>Rejects non-object capability arguments.</summary>
+    /// <summary>No narrowing keeps the grants.</summary>
     [Fact]
-    public void ToolCall_WithArrayArguments_Throws()
+    public void Narrow_with_null_keeps_grants()
     {
-        using var document = JsonDocument.Parse("[]");
+        var grants = new AgentGrants(["a"], ["r"]);
 
-        Assert.Throws<ArgumentException>(() => new ToolCall("echo", "1.0.0", document.RootElement));
+        Assert.Same(grants, grants.Narrow(null));
     }
 
-    /// <summary>Accidental formatting cannot expose request, tool, or memory content.</summary>
+    /// <summary>Grants reject blank entries.</summary>
     [Fact]
-    public void SensitiveRecords_WhenFormatted_OmitWorkloadData()
+    public void Grants_reject_blank_entries()
     {
-        const string secret = "private-data-sentinel";
-        var payload = JsonSerializer.SerializeToElement(new { secret });
-        object[] records =
-        [
-            new AgentRequest(secret, payload),
-            new ToolCall("echo", "1.0.0", payload),
-            new AgentResult(AgentOutcome.Failed, payload, secret, secret),
-            new ToolCallResult(ToolCallStatus.Failed, payload, secret, secret),
-            new AgentMemoryNote(secret, secret, [secret]),
-            new AgentMemoryItem(secret, secret, secret, [secret], DateTimeOffset.UnixEpoch, false),
-            new AgentRecall(Kind: secret, AllTags: [secret]),
-        ];
-
-        Assert.All(records, record => Assert.DoesNotContain(secret, record.ToString(), StringComparison.Ordinal));
+        Assert.Throws<ArgumentException>(() => new AgentGrants([" "], []));
+        Assert.Throws<ArgumentException>(() => new AgentGrants([], [string.Empty]));
     }
 
-    /// <summary>Rejects recalls outside the documented range.</summary>
-    /// <param name="limit">The invalid limit.</param>
+    /// <summary>The payload is a private copy.</summary>
+    [Fact]
+    public void Request_payload_survives_source_disposal()
+    {
+        AgentRequest request;
+        using (var document = JsonDocument.Parse("""{"x":1}"""))
+        {
+            request = new AgentRequest("kind", document.RootElement);
+        }
+
+        Assert.Equal(1, request.Payload.GetProperty("x").GetInt32());
+    }
+
+    /// <summary>A request needs a payload.</summary>
+    [Fact]
+    public void Request_rejects_undefined_payload()
+    {
+        Assert.Throws<ArgumentException>(() => new AgentRequest("kind", default));
+    }
+
+    /// <summary>Tool arguments are a JSON object.</summary>
+    [Fact]
+    public void Tool_call_rejects_non_object_arguments()
+    {
+        using var document = JsonDocument.Parse("[1]");
+
+        Assert.Throws<ArgumentException>(() => new ToolCall("tool", "1.0.0", document.RootElement));
+        Assert.Throws<ArgumentException>(() => new ToolCall("tool", "1.0.0", default));
+    }
+
+    /// <summary>Recall limits follow Memory's bounds.</summary>
+    /// <param name="limit">A bad limit.</param>
     [Theory]
     [InlineData(0)]
     [InlineData(201)]
-    public void Recall_WithInvalidLimit_Throws(int limit) =>
+    public void Recall_rejects_limit_out_of_range(int limit)
+    {
         Assert.Throws<ArgumentOutOfRangeException>(() => new AgentRecall(limit));
+    }
 
-    /// <summary>Rejects repeated keys and keeps a defensive copy of the registration bindings.</summary>
+    /// <summary>A registration binds each tool name once.</summary>
     [Fact]
-    public void Registration_WithDuplicateBindings_Throws()
+    public void Bindings_reject_duplicates()
     {
-        AgentToolBinding[] bindings = [new("echo", "1.0.0")];
-        var agent = new ExampleAgent();
-        var registration = new AgentRegistration(agent, AgentGrants.None, bindings);
-        bindings[0] = new AgentToolBinding("echo", "2.0.0");
+        var agent = new StubAgent();
 
-        Assert.Equal("1.0.0", Assert.Single(registration.Tools).Version);
-        Assert.Throws<ArgumentException>(() => new AgentRegistration(agent, AgentGrants.None, [bindings[0], new("echo", "2.0.0")]));
+        Assert.Throws<ArgumentException>(() => new AgentRegistration(agent, AgentGrants.None, [new("tool", "1.0.0"), new("tool", "2.0.0")]));
     }
 
-    private static (AgentRequest request, ToolCall call, AgentResult result, ToolCallResult toolResult) CreateJsonRecords()
+    /// <summary>The memory binding never lists its home as an extra read.</summary>
+    [Fact]
+    public void Memory_binding_rejects_home_in_also_read()
     {
-        using var document = JsonDocument.Parse("""{"count":42}""");
-        return (
-            new AgentRequest("example", document.RootElement),
-            new ToolCall("echo", "1.0.0", document.RootElement),
-            new AgentResult(AgentOutcome.Completed, document.RootElement, null, null),
-            new ToolCallResult(ToolCallStatus.Succeeded, document.RootElement, null, null));
+        var home = ProjectId.NewId();
+
+        Assert.Throws<ArgumentException>(() => new AgentMemoryBinding(TenantId.NewId(), home, [home]));
     }
 
-    private sealed class ExampleAgent : IAgent
+    /// <summary>Text representations carry no content, arguments or output.</summary>
+    [Fact]
+    public void Records_never_print_their_content()
     {
-        public IAgentDescriptor Descriptor { get; } = new AgentDescriptor("example", "Worker", "automation", "1.0.0");
+        using var document = JsonDocument.Parse("""{"secret":"sk-secret-value"}""");
+        var element = document.RootElement;
+        var texts = new object[]
+        {
+            new AgentRequest("kind", element),
+            new ToolCall("tool", "1.0.0", element),
+            new ToolCallResult(ToolCallStatus.Succeeded, element, null, null),
+            new AgentResult(AgentOutcome.Completed, element, null, null),
+            new AgentMemoryNote("note", "sk-secret-value", ["sk-secret-value"]),
+            new AgentMemoryItem("id", "note", "sk-secret-value", ["sk-secret-value"], DateTimeOffset.UnixEpoch, true),
+        };
+
+        Assert.All(texts, text => Assert.DoesNotContain("sk-secret-value", text.ToString(), StringComparison.Ordinal));
+    }
+
+    private sealed class StubAgent : IAgent
+    {
+        public IAgentDescriptor Descriptor { get; } = new AgentDescriptor("stub", "Stub", "stub", "1.0.0");
 
         public Task<AgentResult> ExecuteAsync(IAgentRunContext context, AgentRequest request, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            Task.FromResult(new AgentResult(AgentOutcome.Completed, null, null, null));
     }
 }

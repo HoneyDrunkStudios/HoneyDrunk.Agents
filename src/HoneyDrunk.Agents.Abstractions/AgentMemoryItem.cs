@@ -1,33 +1,30 @@
+using System.Globalization;
+
 namespace HoneyDrunk.Agents.Abstractions;
 
-/// <summary>A recalled or newly written memory entry.</summary>
-/// <param name="Id">The stable entry identifier.</param>
+/// <summary>A remembered entry, as an agent sees it.</summary>
+/// <param name="Id">The entry id.</param>
 /// <param name="Kind">The entry kind.</param>
-/// <param name="Content">The entry content.</param>
-/// <param name="Tags">The entry tags.</param>
-/// <param name="WrittenAt">The time the entry was written.</param>
-/// <param name="FromHomeScope">Whether the entry is in the execution's home scope.</param>
-public sealed record AgentMemoryItem(
-    string Id,
-    string Kind,
-    string Content,
-    IReadOnlyList<string> Tags,
-    DateTimeOffset WrittenAt,
-    bool FromHomeScope)
+/// <param name="Content">The content.</param>
+/// <param name="Tags">The tags.</param>
+/// <param name="WrittenAt">When the entry was written.</param>
+/// <param name="FromHomeScope">True when the entry belongs to the execution's home scope.</param>
+public sealed record AgentMemoryItem(string Id, string Kind, string Content, IReadOnlyList<string> Tags, DateTimeOffset WrittenAt, bool FromHomeScope)
 {
-    /// <summary>Gets the stable entry identifier.</summary>
-    public string Id { get; } = AgentValidation.NonBlank(Id, nameof(Id));
+    /// <summary>Gets the entry id.</summary>
+    public string Id { get; } = Id ?? throw new ArgumentNullException(nameof(Id));
 
     /// <summary>Gets the entry kind.</summary>
-    public string Kind { get; } = AgentValidation.NonBlank(Kind, nameof(Kind));
+    public string Kind { get; } = Kind ?? throw new ArgumentNullException(nameof(Kind));
 
-    /// <summary>Gets the entry content.</summary>
-    public string Content { get; } = AgentValidation.NonBlank(Content, nameof(Content));
+    /// <summary>Gets the content.</summary>
+    public string Content { get; } = Content ?? throw new ArgumentNullException(nameof(Content));
 
-    /// <summary>Gets the entry tags.</summary>
-    public IReadOnlyList<string> Tags { get; } = AgentValidation.NonBlankList(Tags, nameof(Tags));
+    /// <summary>Gets a private copy of the tags.</summary>
+    public IReadOnlyList<string> Tags { get; } = AgentValidation.NoNulls(Tags, nameof(Tags));
 
-    /// <summary>Formats the record without including workload data.</summary>
-    /// <returns>The safe display text.</returns>
-    public override string ToString() => nameof(AgentMemoryItem);
+    /// <summary>Describes the entry without its content or tags.</summary>
+    /// <returns>The id, kind, content length, tag count, time and home flag.</returns>
+    public override string ToString() =>
+        string.Create(CultureInfo.InvariantCulture, $"AgentMemoryItem {{ Id = {this.Id}, Kind = {this.Kind}, ContentLength = {this.Content.Length}, TagCount = {this.Tags.Count}, WrittenAt = {this.WrittenAt:O}, FromHomeScope = {this.FromHomeScope} }}");
 }

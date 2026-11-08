@@ -6,240 +6,274 @@ using System.Text;
 namespace HoneyDrunk.Agents.Abstractions.Tests.ContractShape;
 
 /// <summary>
-/// Renders the public shape of a set of root types, plus every public type of the same assembly that their
-/// signatures reach, as sorted text lines. Each line names its type, so a diff shows exactly what moved.
+/// Renders the public shape of a set of root types and of every public type from the same assembly
+/// that appears in their signatures. Types are sorted by name; each type line is followed by its
+/// member lines, sorted. Any change to a signature, a nullability annotation, a default value or an
+/// enum number changes the text.
 /// </summary>
 internal static class ContractShapeRenderer
 {
     private const BindingFlags Declared = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
 
-    /// <summary>Renders the shape: a <c># package:</c> and <c># roots:</c> header, then one sorted line per type and member.</summary>
-    /// <param name="roots">The root types, all from one assembly.</param>
-    /// <returns>The rendered shape.</returns>
+    /// <summary>Renders the shape.</summary>
+    /// <param name="roots">The root types; all from one assembly.</param>
+    /// <returns>The sorted shape lines, newline-terminated.</returns>
     public static string Render(IReadOnlyList<Type> roots)
     {
         ArgumentNullException.ThrowIfNull(roots);
         if (roots.Count == 0)
         {
-            throw new ArgumentException("At least one root type is required.", nameof(roots));
+            throw new ArgumentException("At least one root is required.", nameof(roots));
         }
 
         var assembly = roots[0].Assembly;
-        if (roots.Any(root => root.Assembly != assembly))
+        var closure = new SortedDictionary<string, Type>(StringComparer.Ordinal);
+        var pending = new Queue<Type>(roots);
+        while (pending.Count > 0)
         {
-            throw new ArgumentException("All root types must come from one assembly.", nameof(roots));
+            var type = pending.Dequeue();
+            if (!IsContractType(type, assembly) || !closure.TryAdd(Name(type), type))
+            {
+                continue;
+            }
+
+            foreach (var referenced in Referenced(type))
+            {
+                pending.Enqueue(referenced);
+            }
         }
 
         var context = new NullabilityInfoContext();
-        var lines = new List<string>();
-        foreach (var type in Closure(roots, assembly))
-        {
-            lines.Add($"{Name(type)} = {TypeDeclaration(type)}");
-            lines.AddRange(MemberLines(type, context).Select(line => $"{Name(type)} {line}"));
-        }
-
         var builder = new StringBuilder();
-        builder.Append("# package: ").Append(assembly.GetName().Name).Append('\n');
-        builder.Append("# roots: ").Append(string.Join(", ", roots.Select(Name).Order(StringComparer.Ordinal))).Append('\n');
-        foreach (var line in lines.Order(StringComparer.Ordinal))
+        foreach (var type in closure.Values)
         {
-            builder.Append(line).Append('\n');
+            builder.Append(TypeLine(type)).Append('\n');
+            foreach (var line in MemberLines(type, context).Order(StringComparer.Ordinal))
+            {
+                builder.Append(line).Append('\n');
+            }
         }
 
         return builder.ToString();
     }
 
-    private static List<Type> Closure(IReadOnlyList<Type> roots, Assembly assembly)
+    private static bool IsContractType(Type type, Assembly assembly) =>
+        type.Assembly == assembly && !type.IsGenericParameter && (type.IsPublic || type.IsNestedPublic);
+
+    private static bool IsVisible(MethodBase method) => method.IsPublic || method.IsFamily || method.IsFamilyOrAssembly;
+
+    private static bool IsVisible(FieldInfo field) => field.IsPublic || field.IsFamily || field.IsFamilyOrAssembly;
+
+    private static bool IsGenerated(MemberInfo member) => member.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false);
+
+    private static IEnumerable<Type> Referenced(Type type)
     {
-        var found = new HashSet<Type>();
-        var queue = new Queue<Type>();
-        foreach (var root in roots)
+        var direct = new List<Type>();
+        if (type.BaseType is not null)
         {
-            Visit(root, assembly, found, queue);
+            direct.Add(type.BaseType);
         }
 
-        while (queue.Count > 0)
+        direct.AddRange(type.GetInterfaces());
+        foreach (var constructor in type.GetConstructors(Declared).Where(IsVisible))
         {
-            var type = queue.Dequeue();
-            foreach (var referenced in SignatureTypes(type))
-            {
-                Visit(referenced, assembly, found, queue);
-            }
+            direct.AddRange(constructor.GetParameters().Select(parameter => parameter.ParameterType));
         }
 
-        return [.. found];
+        foreach (var method in type.GetMethods(Declared).Where(IsVisible))
+        {
+            direct.Add(method.ReturnType);
+            direct.AddRange(method.GetParameters().Select(parameter => parameter.ParameterType));
+        }
+
+        foreach (var property in type.GetProperties(Declared))
+        {
+            direct.Add(property.PropertyType);
+        }
+
+        foreach (var field in type.GetFields(Declared).Where(IsVisible))
+        {
+            direct.Add(field.FieldType);
+        }
+
+        direct.AddRange(type.GetEvents(Declared).Select(eventInfo => eventInfo.EventHandlerType).OfType<Type>());
+
+        return direct.SelectMany(Unwrap);
     }
 
-    private static void Visit(Type type, Assembly assembly, HashSet<Type> found, Queue<Type> queue)
+    private static IEnumerable<Type> Unwrap(Type type)
     {
         if (type.HasElementType)
         {
-            Visit(type.GetElementType()!, assembly, found, queue);
-            return;
-        }
-
-        if (type.IsGenericParameter)
-        {
-            return;
-        }
-
-        if (type.IsGenericType)
-        {
-            foreach (var argument in type.GetGenericArguments())
+            foreach (var inner in Unwrap(type.GetElementType()!))
             {
-                Visit(argument, assembly, found, queue);
+                yield return inner;
             }
 
-            type = type.GetGenericTypeDefinition();
+            yield break;
         }
 
-        if (type.Assembly == assembly && type.IsVisible && found.Add(type))
+        yield return type.IsGenericType ? type.GetGenericTypeDefinition() : type;
+        foreach (var argument in type.GetGenericArguments())
         {
-            queue.Enqueue(type);
-        }
-    }
-
-    private static IEnumerable<Type> SignatureTypes(Type type)
-    {
-        if (type.BaseType is not null)
-        {
-            yield return type.BaseType;
-        }
-
-        foreach (var contract in type.GetInterfaces())
-        {
-            yield return contract;
-        }
-
-        foreach (var member in VisibleMembers(type))
-        {
-            switch (member)
+            foreach (var inner in Unwrap(argument))
             {
-                case MethodBase method:
-                    if (method is MethodInfo info)
-                    {
-                        yield return info.ReturnType;
-                    }
-
-                    foreach (var parameter in method.GetParameters())
-                    {
-                        yield return parameter.ParameterType;
-                    }
-
-                    break;
-                case PropertyInfo property:
-                    yield return property.PropertyType;
-                    foreach (var parameter in property.GetIndexParameters())
-                    {
-                        yield return parameter.ParameterType;
-                    }
-
-                    break;
-                case FieldInfo field:
-                    yield return field.FieldType;
-                    break;
-                case EventInfo @event when @event.EventHandlerType is not null:
-                    yield return @event.EventHandlerType;
-                    break;
+                yield return inner;
             }
         }
     }
 
-    private static IEnumerable<MemberInfo> VisibleMembers(Type type)
+    private static string TypeLine(Type type)
     {
-        var accessors = new HashSet<MethodInfo>();
-        foreach (var property in type.GetProperties(Declared))
+        string kind;
+        if (type.IsInterface)
         {
-            accessors.UnionWith(property.GetAccessors(nonPublic: true));
-            if (IsVisible(property.GetMethod) || IsVisible(property.SetMethod))
+            kind = "interface";
+        }
+        else if (type.IsEnum)
+        {
+            kind = "enum " + Name(Enum.GetUnderlyingType(type));
+        }
+        else if (typeof(Delegate).IsAssignableFrom(type))
+        {
+            kind = "delegate";
+        }
+        else if (type.IsValueType)
+        {
+            kind = type.IsDefined(typeof(IsReadOnlyAttribute), inherit: false) ? "readonly struct" : "struct";
+        }
+        else
+        {
+            kind = (isAbstract: type.IsAbstract, isSealed: type.IsSealed) switch
             {
-                yield return property;
-            }
+                (true, true) => "static class",
+                (true, false) => "abstract class",
+                (false, true) => "sealed class",
+                _ => "class",
+            };
         }
 
-        foreach (var @event in type.GetEvents(Declared))
+        var builder = new StringBuilder("type ").Append(Name(type)).Append(": ").Append(kind);
+        if (type.BaseType is not null && type.BaseType != typeof(object) && type.BaseType != typeof(ValueType) && type.BaseType != typeof(Enum))
         {
-            accessors.UnionWith(new[] { @event.AddMethod, @event.RemoveMethod, @event.RaiseMethod }.OfType<MethodInfo>());
-            if (IsVisible(@event.AddMethod))
-            {
-                yield return @event;
-            }
+            builder.Append(" : ").Append(TypeName(type.BaseType, null));
         }
 
-        foreach (var constructor in type.GetConstructors(Declared).Where(constructor => IsVisible(constructor) && !IsCompilerGenerated(constructor)))
+        var interfaces = type.GetInterfaces().Select(contract => TypeName(contract, null)).Order(StringComparer.Ordinal).ToArray();
+        if (interfaces.Length > 0)
         {
-            yield return constructor;
+            builder.Append(" implements ").Append(string.Join(", ", interfaces));
         }
 
-        foreach (var method in type.GetMethods(Declared).Where(method => IsVisible(method) && !accessors.Contains(method) && !IsCompilerGenerated(method)))
-        {
-            yield return method;
-        }
-
-        foreach (var field in type.GetFields(Declared).Where(field => (field.IsPublic || field.IsFamily || field.IsFamilyOrAssembly) && !field.IsSpecialName && !IsCompilerGenerated(field)))
-        {
-            yield return field;
-        }
+        return builder.ToString();
     }
 
     private static IEnumerable<string> MemberLines(Type type, NullabilityInfoContext context)
     {
-        foreach (var member in VisibleMembers(type))
+        var prefix = "  " + Name(type) + " ";
+        if (type.IsEnum)
         {
-            yield return member switch
+            foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Static))
             {
-                ConstructorInfo constructor => $"ctor({Parameters(constructor.GetParameters(), context)})",
-                MethodInfo method => MethodLine(method, context),
-                PropertyInfo property => PropertyLine(property, context),
-                FieldInfo field when type.IsEnum => $"value: {field.Name} = {Convert.ToInt64(field.GetRawConstantValue(), CultureInfo.InvariantCulture)}",
-                FieldInfo field => FieldLine(field, context),
-                EventInfo @event => $"event: {Name(@event.EventHandlerType!, context.Create(@event))} {@event.Name}",
-                _ => throw new InvalidOperationException($"Unexpected member kind {member.MemberType}."),
-            };
+                yield return prefix + "value " + field.Name + " = " + Convert.ToString(field.GetRawConstantValue(), CultureInfo.InvariantCulture);
+            }
+
+            yield break;
         }
-    }
 
-    private static string MethodLine(MethodInfo method, NullabilityInfoContext context)
-    {
-        var generics = method.IsGenericMethodDefinition ? $"<{string.Join(", ", method.GetGenericArguments().Select(argument => argument.Name))}>" : string.Empty;
-        var returnType = Name(method.ReturnType, context.Create(method.ReturnParameter));
-        return $"method: {Static(method.IsStatic)}{returnType} {method.Name}{generics}({Parameters(method.GetParameters(), context)})";
-    }
-
-    private static string PropertyLine(PropertyInfo property, NullabilityInfoContext context)
-    {
-        var accessors = new StringBuilder("{ ");
-        if (IsVisible(property.GetMethod))
+        foreach (var constructor in type.GetConstructors(Declared).Where(IsVisible).Where(constructor => !IsGenerated(constructor)))
         {
-            accessors.Append("get; ");
+            yield return prefix + Access(constructor) + "ctor(" + Parameters(constructor, context) + ")";
         }
 
-        if (IsVisible(property.SetMethod))
+        foreach (var method in type.GetMethods(Declared).Where(IsVisible).Where(method => !IsGenerated(method)))
         {
-            var isInit = property.SetMethod!.ReturnParameter.GetRequiredCustomModifiers().Any(modifier => modifier == typeof(IsExternalInit));
-            accessors.Append(isInit ? "init; " : "set; ");
+            if (method.IsSpecialName && !method.Name.StartsWith("op_", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var generic = method.IsGenericMethodDefinition
+                ? "<" + string.Join(", ", method.GetGenericArguments().Select(argument => argument.Name)) + ">"
+                : string.Empty;
+            yield return prefix + Access(method) + Modifiers(method) + "method "
+                + TypeName(method.ReturnType, context.Create(method.ReturnParameter)) + " "
+                + method.Name + generic + "(" + Parameters(method, context) + ")";
         }
 
-        accessors.Append('}');
-        var indexer = property.GetIndexParameters() is { Length: > 0 } index ? $"[{Parameters(index, context)}]" : string.Empty;
-        var isStatic = (property.GetMethod ?? property.SetMethod)!.IsStatic;
-        return $"property: {Static(isStatic)}{Name(property.PropertyType, context.Create(property))} {property.Name}{indexer} {accessors}";
+        foreach (var property in type.GetProperties(Declared).Where(property => !IsGenerated(property)))
+        {
+            var getter = property.GetMethod is { } get && IsVisible(get) ? get : null;
+            var setter = property.SetMethod is { } set && IsVisible(set) ? set : null;
+            if (getter is null && setter is null)
+            {
+                continue;
+            }
+
+            var accessors = new List<string>();
+            if (getter is not null)
+            {
+                accessors.Add("get;");
+            }
+
+            if (setter is not null)
+            {
+                var isInit = setter.ReturnParameter.GetRequiredCustomModifiers().Contains(typeof(IsExternalInit));
+                accessors.Add(isInit ? "init;" : "set;");
+            }
+
+            var indexers = property.GetIndexParameters();
+            var index = indexers.Length == 0
+                ? string.Empty
+                : "[" + string.Join(", ", indexers.Select(parameter => Parameter(parameter, context))) + "]";
+            yield return prefix + Access((getter ?? setter)!) + Modifiers((getter ?? setter)!) + "property "
+                + TypeName(property.PropertyType, context.Create(property)) + " " + property.Name + index
+                + " { " + string.Join(" ", accessors) + " }";
+        }
+
+        foreach (var field in type.GetFields(Declared).Where(IsVisible).Where(field => !IsGenerated(field)))
+        {
+            var modifiers = field.IsLiteral ? "const " : (field.IsStatic ? "static " : string.Empty) + (field.IsInitOnly ? "readonly " : string.Empty);
+            var value = field.IsLiteral ? " = " + Value(field.GetRawConstantValue(), field.FieldType) : string.Empty;
+            yield return prefix + (field.IsPublic ? "public " : "protected ") + modifiers + "field "
+                + TypeName(field.FieldType, context.Create(field)) + " " + field.Name + value;
+        }
+
+        foreach (var eventInfo in type.GetEvents(Declared).Where(eventInfo => !IsGenerated(eventInfo)))
+        {
+            yield return prefix + "event " + TypeName(eventInfo.EventHandlerType!, context.Create(eventInfo)) + " " + eventInfo.Name;
+        }
     }
 
-    private static string FieldLine(FieldInfo field, NullabilityInfoContext context)
+    private static string Access(MethodBase method) => method.IsPublic ? "public " : "protected ";
+
+    private static string Modifiers(MethodInfo method)
     {
-        var type = Name(field.FieldType, context.Create(field));
-        if (field.IsLiteral)
+        if (method.IsStatic)
         {
-            return $"field: const {type} {field.Name} = {Literal(field.GetRawConstantValue(), field.FieldType)}";
+            return "static ";
         }
 
-        var modifiers = Static(field.IsStatic) + (field.IsInitOnly ? "readonly " : string.Empty);
-        return $"field: {modifiers}{type} {field.Name}";
+        if (method.DeclaringType!.IsInterface)
+        {
+            return method.IsAbstract ? string.Empty : "default ";
+        }
+
+        if (method.IsAbstract)
+        {
+            return "abstract ";
+        }
+
+        if (method.IsVirtual && !method.IsFinal)
+        {
+            return method.GetBaseDefinition() == method ? "virtual " : "override ";
+        }
+
+        return method.IsVirtual && method.GetBaseDefinition() != method ? "sealed override " : string.Empty;
     }
 
-    private static string Parameters(ParameterInfo[] parameters, NullabilityInfoContext context) =>
-        string.Join(", ", parameters.Select(parameter => Parameter(parameter, context)));
+    private static string Parameters(MethodBase method, NullabilityInfoContext context) =>
+        string.Join(", ", method.GetParameters().Select(parameter => Parameter(parameter, context)));
 
     private static string Parameter(ParameterInfo parameter, NullabilityInfoContext context)
     {
@@ -255,131 +289,62 @@ internal static class ContractShapeRenderer
             modifier = "params ";
         }
 
-        var nullability = context.Create(parameter);
-        var text = $"{modifier}{Name(type, nullability, useWriteState: !parameter.IsOut)} {parameter.Name}";
-        return parameter.HasDefaultValue ? $"{text} = {Literal(parameter.RawDefaultValue, type)}" : text;
+        var text = modifier + TypeName(type, context.Create(parameter)) + " " + parameter.Name;
+        return parameter.HasDefaultValue ? text + " = " + Value(parameter.DefaultValue, type) : text;
     }
 
-    private static string TypeDeclaration(Type type)
+    private static string Value(object? value, Type type)
     {
-        if (type.IsInterface)
+        if (value is null)
         {
-            return Inheritance("interface", null, type);
+            return type.IsValueType && Nullable.GetUnderlyingType(type) is null ? "default" : "null";
         }
 
-        if (type.IsEnum)
+        return value switch
         {
-            return $"enum : {Name(Enum.GetUnderlyingType(type))}";
-        }
-
-        if (type.IsSubclassOf(typeof(Delegate)))
-        {
-            return "delegate";
-        }
-
-        var modifiers = new List<string>();
-        if (type.IsValueType)
-        {
-            if (type.IsDefined(typeof(IsReadOnlyAttribute), inherit: false))
-            {
-                modifiers.Add("readonly");
-            }
-
-            if (IsRecord(type))
-            {
-                modifiers.Add("record");
-            }
-
-            modifiers.Add("struct");
-            return Inheritance(string.Join(' ', modifiers), null, type);
-        }
-
-        if (type.IsAbstract && type.IsSealed)
-        {
-            modifiers.Add("static");
-        }
-        else if (type.IsAbstract)
-        {
-            modifiers.Add("abstract");
-        }
-        else if (type.IsSealed)
-        {
-            modifiers.Add("sealed");
-        }
-
-        if (IsRecord(type))
-        {
-            modifiers.Add("record");
-        }
-
-        modifiers.Add("class");
-        return Inheritance(string.Join(' ', modifiers), type.BaseType, type);
+            string text => "\"" + text.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal) + "\"",
+            bool flag => flag ? "true" : "false",
+            char character => "'" + character + "'",
+            Enum member => Convert.ToString(Convert.ToInt64(member, CultureInfo.InvariantCulture), CultureInfo.InvariantCulture)!,
+            IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
+            _ => value.ToString() ?? string.Empty,
+        };
     }
 
-    private static string Inheritance(string kind, Type? baseType, Type type)
+    private static string TypeName(Type type, NullabilityInfo? nullability)
     {
-        var parents = new List<string>();
-        if (baseType is not null && baseType != typeof(object) && baseType != typeof(ValueType))
+        if (Nullable.GetUnderlyingType(type) is { } underlying)
         {
-            parents.Add(Name(baseType));
+            return TypeName(underlying, nullability?.GenericTypeArguments.FirstOrDefault()) + "?";
         }
 
-        parents.AddRange(type.GetInterfaces().Select(contract => Name(contract)).Order(StringComparer.Ordinal));
-        return parents.Count == 0 ? kind : $"{kind} : {string.Join(", ", parents)}";
-    }
-
-    private static bool IsRecord(Type type) =>
-        type.GetMethod("PrintMembers", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, [typeof(StringBuilder)]) is not null;
-
-    private static string Name(Type type) => Name(type, null);
-
-    private static string Name(Type type, NullabilityInfo? nullability, bool useWriteState = false)
-    {
-        var state = nullability is null ? NullabilityState.Unknown : useWriteState ? nullability.WriteState : nullability.ReadState;
-        var marker = !type.IsValueType && state == NullabilityState.Nullable ? "?" : string.Empty;
+        var nullable = !type.IsValueType && nullability?.ReadState == NullabilityState.Nullable ? "?" : string.Empty;
+        if (type.IsArray)
+        {
+            return TypeName(type.GetElementType()!, nullability?.ElementType) + "[]" + nullable;
+        }
 
         if (type.IsGenericParameter)
         {
-            return type.Name + marker;
+            return type.Name + nullable;
         }
 
-        if (type.IsArray)
-        {
-            return $"{Name(type.GetElementType()!, nullability?.ElementType)}[{new string(',', type.GetArrayRank() - 1)}]{marker}";
-        }
-
-        if (Nullable.GetUnderlyingType(type) is { } underlying)
-        {
-            return $"{Name(underlying, nullability?.GenericTypeArguments.FirstOrDefault())}?";
-        }
-
-        var prefix = type.IsNested ? Name(type.DeclaringType!) + "+" : type.Namespace is null ? string.Empty : type.Namespace + ".";
         if (!type.IsGenericType)
         {
-            return prefix + type.Name + marker;
+            return Name(type) + nullable;
         }
 
         var arguments = type.GetGenericArguments();
         var argumentNames = arguments.Select((argument, index) =>
-            Name(argument, nullability is not null && index < nullability.GenericTypeArguments.Length ? nullability.GenericTypeArguments[index] : null));
-        var tick = type.Name.IndexOf('`', StringComparison.Ordinal);
-        var simpleName = tick < 0 ? type.Name : type.Name[..tick];
-        return $"{prefix}{simpleName}<{string.Join(", ", argumentNames)}>{marker}";
+            TypeName(argument, nullability is not null && index < nullability.GenericTypeArguments.Length ? nullability.GenericTypeArguments[index] : null));
+        return Name(type) + "<" + string.Join(", ", argumentNames) + ">" + nullable;
     }
 
-    private static string Literal(object? value, Type type) => value switch
+    private static string Name(Type type)
     {
-        null => type.IsValueType ? "default" : "null",
-        string text => $"\"{text.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal)}\"",
-        char character => $"'{character}'",
-        bool flag => flag ? "true" : "false",
-        IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
-        _ => value.ToString() ?? "null",
-    };
-
-    private static string Static(bool isStatic) => isStatic ? "static " : string.Empty;
-
-    private static bool IsVisible(MethodBase? method) => method is not null && (method.IsPublic || method.IsFamily || method.IsFamilyOrAssembly);
-
-    private static bool IsCompilerGenerated(MemberInfo member) => member.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false);
+        var definition = type.IsGenericType ? type.GetGenericTypeDefinition() : type;
+        var name = definition.FullName ?? definition.Name;
+        var tick = name.IndexOf('`', StringComparison.Ordinal);
+        return tick < 0 ? name : name[..tick];
+    }
 }

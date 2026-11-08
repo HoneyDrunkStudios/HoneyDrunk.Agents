@@ -2,124 +2,113 @@ using System.Text;
 
 namespace HoneyDrunk.Agents.Abstractions.Tests.ContractShape;
 
-/// <summary>
-/// Compares a rendered contract shape with the committed baseline. A changed body fails unless an update is
-/// requested, and an update is refused unless the assembly version is greater than the baseline's version.
-/// </summary>
+/// <summary>Compares a rendered contract shape with the committed baseline file.</summary>
 internal static class ContractShapeCheck
 {
-    private const string VersionHeader = "# version: ";
-    private const string PackageHeader = "# package: ";
+    /// <summary>The command that regenerates the baseline.</summary>
+    public const string UpdateCommand = "HONEYDRUNK_UPDATE_CONTRACT_SHAPE=1 dotnet test tests/HoneyDrunk.Agents.Abstractions.Tests -c Release --filter Category=ContractShape";
+
+    private const string VersionHeader = "# version:";
+    private const string PackageHeader = "# package:";
     private const int MaxListedLines = 20;
-    private const string UpdateHint =
-        "If the change is intended, raise <Version> in Directory.Build.props, then run the ContractShape tests with HONEYDRUNK_UPDATE_CONTRACT_SHAPE=1 " +
-        "(dotnet test --filter Category=ContractShape) and commit the regenerated baseline.";
 
-    private const string CreateHint =
-        "Run the ContractShape tests with HONEYDRUNK_UPDATE_CONTRACT_SHAPE=1 (dotnet test --filter Category=ContractShape) and commit the new baseline.";
-
-    /// <summary>Checks the current shape against the baseline file, and rewrites the file when an allowed update is requested.</summary>
-    /// <param name="currentShape">The rendered shape: <c># package:</c> and <c># roots:</c> header lines, then the body.</param>
-    /// <param name="baselineFile">The path of the committed baseline file.</param>
-    /// <param name="assemblyVersion">The assembly's informational version; any text from <c>+</c> on is ignored.</param>
-    /// <param name="updateRequested">Whether to regenerate the baseline.</param>
-    /// <returns>Whether the check passed, and a message saying why.</returns>
+    /// <summary>
+    /// Verifies the shape. The baseline header holds <c># package:</c>, <c># version:</c> and
+    /// <c># roots:</c>; everything but the version line is the body.
+    /// </summary>
+    /// <param name="currentShape">The current shape, with its <c># package:</c> and <c># roots:</c> header lines.</param>
+    /// <param name="baselineFile">The baseline file path.</param>
+    /// <param name="assemblyVersion">The assembly version (the informational version without build metadata).</param>
+    /// <param name="updateRequested">Whether regeneration was requested.</param>
+    /// <returns>Whether the check passed, and why.</returns>
     public static (bool passed, string message) Verify(string currentShape, string? baselineFile, string assemblyVersion, bool updateRequested)
     {
         ArgumentNullException.ThrowIfNull(currentShape);
         ArgumentException.ThrowIfNullOrWhiteSpace(assemblyVersion);
-        var version = assemblyVersion.Split('+')[0];
-        var current = Parse(currentShape);
-
-        if (string.IsNullOrWhiteSpace(baselineFile))
+        var current = Body(currentShape);
+        if (baselineFile is null || !File.Exists(baselineFile))
         {
-            return (false, "No contract-shape baseline path was given.");
-        }
-
-        if (!File.Exists(baselineFile))
-        {
-            if (!updateRequested)
+            if (!updateRequested || baselineFile is null)
             {
-                return (false, $"No contract-shape baseline exists at {baselineFile}. {CreateHint}");
+                return (false, $"No contract-shape baseline exists at '{baselineFile}'. Generate it with: {UpdateCommand}");
             }
 
-            Write(baselineFile, current, version);
-            return (true, $"Wrote a new contract-shape baseline at version {version}.");
+            Write(baselineFile, currentShape, assemblyVersion);
+            return (true, $"Wrote the contract-shape baseline at version {assemblyVersion}.");
         }
 
-        var baseline = Parse(File.ReadAllText(baselineFile));
-        if (baseline.body.SequenceEqual(current.body, StringComparer.Ordinal))
+        var baselineText = File.ReadAllText(baselineFile);
+        var baseline = Body(baselineText);
+        if (current.SequenceEqual(baseline, StringComparer.Ordinal))
         {
             return (true, "The contract shape matches the baseline.");
         }
 
-        var baselineVersion = baseline.header.FirstOrDefault(line => line.StartsWith(VersionHeader, StringComparison.Ordinal))?[VersionHeader.Length..].Trim() ?? string.Empty;
         if (!updateRequested)
         {
-            return (false, $"The contract shape changed since version {baselineVersion}.\n{Difference(baseline.body, current.body)}{UpdateHint}");
+            return (false, Difference(current, baseline));
         }
 
-        if (!IsGreater(version, baselineVersion))
+        var baselineVersion = Lines(baselineText).FirstOrDefault(line => line.StartsWith(VersionHeader, StringComparison.Ordinal))?[VersionHeader.Length..].Trim();
+        if (!Version.TryParse(assemblyVersion, out var next) || !Version.TryParse(baselineVersion, out var previous) || next <= previous)
         {
-            return (false, $"Refusing to update the contract-shape baseline: the shape changed but version {version} is not greater than the baseline version {baselineVersion}. Raise <Version> first.");
+            return (false, $"The contract shape changed, but the assembly version {assemblyVersion} is not greater than the baseline version {baselineVersion}. Raise Version in Directory.Build.props first.");
         }
 
-        Write(baselineFile, current, version);
-        return (true, $"Updated the contract-shape baseline from version {baselineVersion} to {version}.");
+        Write(baselineFile, currentShape, assemblyVersion);
+        return (true, $"Updated the contract-shape baseline from {baselineVersion} to {assemblyVersion}.");
     }
 
-    private static (List<string> header, List<string> body) Parse(string text)
-    {
-        var lines = text.Split('\n').Select(line => line.TrimEnd('\r')).Where(line => line.Length > 0).ToList();
-        return (lines.Where(line => line.StartsWith('#')).ToList(), lines.Where(line => !line.StartsWith('#')).ToList());
-    }
+    private static string[] Lines(string text) =>
+        text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').Where(line => line.Length > 0).ToArray();
 
-    private static void Write(string path, (List<string> header, List<string> body) shape, string version)
+    private static string[] Body(string text) =>
+        Lines(text).Where(line => !line.StartsWith(VersionHeader, StringComparison.Ordinal)).ToArray();
+
+    private static void Write(string file, string currentShape, string version)
     {
         var builder = new StringBuilder();
-        var header = shape.header.Where(line => !line.StartsWith(VersionHeader, StringComparison.Ordinal)).ToList();
-        var package = header.FindIndex(line => line.StartsWith(PackageHeader, StringComparison.Ordinal));
-        header.Insert(package + 1, VersionHeader + version);
-        foreach (var line in header.Concat(shape.body))
+        var wroteVersion = false;
+        foreach (var line in Body(currentShape))
         {
             builder.Append(line).Append('\n');
+            if (!wroteVersion && line.StartsWith(PackageHeader, StringComparison.Ordinal))
+            {
+                builder.Append(VersionHeader).Append(' ').Append(version).Append('\n');
+                wroteVersion = true;
+            }
         }
 
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-        File.WriteAllText(path, builder.ToString());
+        if (!wroteVersion)
+        {
+            builder.Insert(0, VersionHeader + " " + version + "\n");
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!);
+        File.WriteAllText(file, builder.ToString());
     }
 
-    private static string Difference(List<string> baseline, List<string> current)
+    private static string Difference(string[] current, string[] baseline)
     {
-        var builder = new StringBuilder();
-        var added = current.Except(baseline, StringComparer.Ordinal).ToList();
-        var removed = baseline.Except(current, StringComparer.Ordinal).ToList();
-        Append(builder, "Added", '+', added);
-        Append(builder, "Removed", '-', removed);
+        var added = current.Except(baseline, StringComparer.Ordinal).ToArray();
+        var removed = baseline.Except(current, StringComparer.Ordinal).ToArray();
+        var builder = new StringBuilder("The contract shape drifted from the committed baseline. Bump Version and run: ")
+            .Append(UpdateCommand).Append('\n');
+        foreach (var line in added.Take(MaxListedLines))
+        {
+            builder.Append("+ ").Append(line.Trim()).Append('\n');
+        }
+
+        foreach (var line in removed.Take(MaxListedLines))
+        {
+            builder.Append("- ").Append(line.Trim()).Append('\n');
+        }
+
+        if (added.Length > MaxListedLines || removed.Length > MaxListedLines)
+        {
+            builder.Append('(').Append(added.Length).Append(" added and ").Append(removed.Length).Append(" removed lines in total)\n");
+        }
+
         return builder.ToString();
     }
-
-    private static void Append(StringBuilder builder, string title, char marker, List<string> lines)
-    {
-        if (lines.Count == 0)
-        {
-            return;
-        }
-
-        builder.Append(title).Append(" (").Append(lines.Count).Append("):\n");
-        foreach (var line in lines.Take(MaxListedLines))
-        {
-            builder.Append(marker).Append(' ').Append(line).Append('\n');
-        }
-
-        if (lines.Count > MaxListedLines)
-        {
-            builder.Append("... and ").Append(lines.Count - MaxListedLines).Append(" more\n");
-        }
-    }
-
-    private static bool IsGreater(string candidate, string baseline) =>
-        System.Version.TryParse(candidate.Split('-')[0], out var next)
-        && System.Version.TryParse(baseline.Split('-')[0], out var previous)
-        && next > previous;
 }

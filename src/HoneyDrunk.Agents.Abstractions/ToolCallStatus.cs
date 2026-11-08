@@ -1,32 +1,32 @@
 namespace HoneyDrunk.Agents.Abstractions;
 
-/// <summary>The disposition of a tool invocation.</summary>
+/// <summary>How a tool call ended.</summary>
 public enum ToolCallStatus
 {
-    /// <summary>The capability completed.</summary>
+    /// <summary>The tool ran and succeeded.</summary>
     Succeeded = 0,
 
-    /// <summary>The agent was not registered for this capability.</summary>
+    /// <summary>The agent is not bound to this tool at this version.</summary>
     NotBound = 1,
 
-    /// <summary>The registry did not resolve the capability.</summary>
+    /// <summary>No tool is registered under this name and version.</summary>
     NotFound = 2,
 
-    /// <summary>A policy or guard denied the call.</summary>
+    /// <summary>Policy, an approver or authorization denied the call.</summary>
     Denied = 3,
 
-    /// <summary>The call requires approval.</summary>
+    /// <summary>The call waits for a human approval.</summary>
     AwaitingApproval = 4,
 
-    /// <summary>A safety control prevented dispatch.</summary>
+    /// <summary>A circuit breaker stopped the call.</summary>
     Halted = 5,
 
-    /// <summary>The execution exhausted its tool call allowance.</summary>
+    /// <summary>The execution reached its tool-call limit.</summary>
     LimitReached = 6,
 
-    /// <summary>The capability rejected the arguments.</summary>
+    /// <summary>The tool rejected the arguments.</summary>
     InvalidArguments = 7,
 
-    /// <summary>The invocation failed.</summary>
+    /// <summary>The call failed.</summary>
     Failed = 8,
 }

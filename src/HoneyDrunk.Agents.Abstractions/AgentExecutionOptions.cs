@@ -1,10 +1,10 @@
 namespace HoneyDrunk.Agents.Abstractions;
 
-/// <summary>Host-selected restrictions for one execution.</summary>
-/// <param name="Memory">The requested memory binding.</param>
-/// <param name="NarrowGrantsTo">The optional scope and role subset for this execution.</param>
+/// <summary>Per-execution settings.</summary>
+/// <param name="Memory">Where the execution remembers and recalls.</param>
+/// <param name="NarrowGrantsTo">Narrows the agent's registered grants for this execution; never widens them.</param>
 public sealed record AgentExecutionOptions(AgentMemoryBinding Memory, AgentGrants? NarrowGrantsTo = null)
 {
-    /// <summary>Gets the requested memory binding.</summary>
+    /// <summary>Gets the memory binding.</summary>
     public AgentMemoryBinding Memory { get; } = Memory ?? throw new ArgumentNullException(nameof(Memory));
 }

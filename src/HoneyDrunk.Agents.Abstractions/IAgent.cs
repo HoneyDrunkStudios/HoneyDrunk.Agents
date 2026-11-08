@@ -2,16 +2,16 @@ using HoneyDrunk.Kernel.Abstractions.Agents;
 
 namespace HoneyDrunk.Agents.Abstractions;
 
-/// <summary>Executes one workload request with the context supplied by its host.</summary>
+/// <summary>An agent: something that runs one execution at a time inside a runtime-built context.</summary>
 public interface IAgent
 {
-    /// <summary>Gets the workload's Grid identity.</summary>
+    /// <summary>Gets the agent's descriptor.</summary>
     IAgentDescriptor Descriptor { get; }
 
-    /// <summary>Executes one request.</summary>
-    /// <param name="context">The context valid for this execution.</param>
-    /// <param name="request">The workload request.</param>
-    /// <param name="cancellationToken">The execution cancellation token.</param>
-    /// <returns>The workload result.</returns>
+    /// <summary>Runs one execution. The context and everything reached through it are disposed when it completes.</summary>
+    /// <param name="context">The execution context.</param>
+    /// <param name="request">What the execution is asked to do.</param>
+    /// <param name="cancellationToken">Cancels the execution.</param>
+    /// <returns>The result.</returns>
     Task<AgentResult> ExecuteAsync(IAgentRunContext context, AgentRequest request, CancellationToken cancellationToken);
 }

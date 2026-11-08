@@ -1,34 +1,37 @@
 namespace HoneyDrunk.Agents.Abstractions;
 
-/// <summary>Manages registrations and executions within a host.</summary>
+/// <summary>
+/// Registers, initializes, runs and decommissions agents in one host. Host-facing, so it sits outside the
+/// contract-shape canary (ADR-0020 D10). Each execution runs in its own dependency-injection scope.
+/// </summary>
 public interface IAgentLifecycle
 {
-    /// <summary>Registers an agent and the maximum access this host grants it.</summary>
-    /// <param name="registration">The agent, grants, and tool bindings.</param>
+    /// <summary>Registers an agent. The agent id must be unique in this host.</summary>
+    /// <param name="registration">The registration.</param>
     void Register(AgentRegistration registration);
 
-    /// <summary>Initializes a registration so it can execute requests.</summary>
-    /// <param name="agentId">The registration ID.</param>
-    /// <param name="cancellationToken">The initialization cancellation token.</param>
-    /// <returns>The initialization operation.</returns>
+    /// <summary>Initializes a registered agent, checking that every bound tool exists.</summary>
+    /// <param name="agentId">The agent id.</param>
+    /// <param name="cancellationToken">Cancels initialization.</param>
+    /// <returns>A task that completes when the agent accepts executions.</returns>
     Task InitializeAsync(string agentId, CancellationToken cancellationToken = default);
 
-    /// <summary>Runs a request through an initialized registration.</summary>
-    /// <param name="agentId">The registration ID.</param>
-    /// <param name="request">The workload request.</param>
-    /// <param name="options">The restrictions on this execution.</param>
-    /// <param name="cancellationToken">The caller cancellation token.</param>
-    /// <returns>The execution result.</returns>
+    /// <summary>Runs one execution of an initialized agent.</summary>
+    /// <param name="agentId">The agent id.</param>
+    /// <param name="request">What the execution is asked to do.</param>
+    /// <param name="options">Per-execution settings.</param>
+    /// <param name="cancellationToken">Cancels the execution.</param>
+    /// <returns>The result.</returns>
     Task<AgentResult> ExecuteAsync(string agentId, AgentRequest request, AgentExecutionOptions options, CancellationToken cancellationToken = default);
 
-    /// <summary>Retires a registration so it can no longer start executions.</summary>
-    /// <param name="agentId">The registration ID.</param>
-    /// <param name="cancellationToken">The decommission cancellation token.</param>
-    /// <returns>The decommission operation.</returns>
+    /// <summary>Decommissions an agent; later executions are refused.</summary>
+    /// <param name="agentId">The agent id.</param>
+    /// <param name="cancellationToken">Cancels decommissioning.</param>
+    /// <returns>A task that completes when the agent is decommissioned.</returns>
     Task DecommissionAsync(string agentId, CancellationToken cancellationToken = default);
 
-    /// <summary>Reads the current phase of a registration.</summary>
-    /// <param name="agentId">The registration ID.</param>
-    /// <returns>The registration phase.</returns>
+    /// <summary>Gets an agent's phase.</summary>
+    /// <param name="agentId">The agent id.</param>
+    /// <returns>The phase.</returns>
     AgentLifecyclePhase GetPhase(string agentId);
 }

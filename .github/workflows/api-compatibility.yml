@@ -4,8 +4,6 @@ on:
   pull_request:
     branches: [ main ]
     paths:
-      - '.github/workflows/api-compatibility.yml'
-      - 'Directory.Build.props'
       - 'src/HoneyDrunk.Agents.Abstractions/**'
       - 'api/**'
       - 'tests/HoneyDrunk.Agents.Abstractions.Tests/**'

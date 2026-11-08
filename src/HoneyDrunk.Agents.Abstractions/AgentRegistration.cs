@@ -1,29 +1,33 @@
 namespace HoneyDrunk.Agents.Abstractions;
 
-/// <summary>A host registration with the agent's maximum grants and exact tool bindings.</summary>
-/// <param name="Agent">The agent implementation.</param>
-/// <param name="Grants">The maximum scopes and roles for this registration.</param>
-/// <param name="Tools">The allowed name and version pairs.</param>
+/// <summary>An agent with the grants and tools it is registered with. Each tool name is bound once.</summary>
+/// <param name="Agent">The agent.</param>
+/// <param name="Grants">The most the agent may ever hold.</param>
+/// <param name="Tools">The tools the agent may call.</param>
 public sealed record AgentRegistration(IAgent Agent, AgentGrants Grants, IReadOnlyList<AgentToolBinding> Tools)
 {
-    /// <summary>Gets the agent implementation.</summary>
+    /// <summary>Gets the agent.</summary>
     public IAgent Agent { get; } = Agent ?? throw new ArgumentNullException(nameof(Agent));
 
-    /// <summary>Gets the maximum scopes and roles.</summary>
+    /// <summary>Gets the registered grants.</summary>
     public AgentGrants Grants { get; } = Grants ?? throw new ArgumentNullException(nameof(Grants));
 
-    /// <summary>Gets the allowed name and version pairs.</summary>
-    public IReadOnlyList<AgentToolBinding> Tools { get; } = SnapshotBindings(Tools);
+    /// <summary>Gets a private copy of the tool bindings.</summary>
+    public IReadOnlyList<AgentToolBinding> Tools { get; } = Validate(Tools);
 
-    private static IReadOnlyList<AgentToolBinding> SnapshotBindings(IReadOnlyList<AgentToolBinding> tools)
+    private static IReadOnlyList<AgentToolBinding> Validate(IReadOnlyList<AgentToolBinding> tools)
     {
         ArgumentNullException.ThrowIfNull(tools);
-        var snapshot = tools.ToArray();
-        if (snapshot.Any(binding => binding is null) || snapshot.Distinct().Count() != snapshot.Length)
+        if (tools.Any(tool => tool is null))
         {
-            throw new ArgumentException("Tool bindings must be non-null and unique by name and version.", nameof(tools));
+            throw new ArgumentException("Bindings must not be null.", nameof(tools));
         }
 
-        return Array.AsReadOnly(snapshot);
+        if (tools.Select(tool => tool.Name).Distinct(StringComparer.Ordinal).Count() != tools.Count)
+        {
+            throw new ArgumentException("Each tool name may be bound once.", nameof(tools));
+        }
+
+        return tools.ToArray().AsReadOnly();
     }
 }

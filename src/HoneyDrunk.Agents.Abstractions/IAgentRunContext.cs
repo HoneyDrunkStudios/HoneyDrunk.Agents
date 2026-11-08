@@ -1,20 +1,24 @@
 namespace HoneyDrunk.Agents.Abstractions;
 
-/// <summary>Extends the Kernel context with the resources granted to one execution.</summary>
-public interface IAgentRunContext : Kernel.Abstractions.Agents.IAgentExecutionContext
+/// <summary>
+/// One execution's context: Kernel's agent context plus the effective grants, the tool bindings, tool invocation
+/// and scoped memory. It holds execution-scoped state only and is disposed when the execution completes; Kernel's
+/// <c>ExecutionMetadata</c> carries short-term working state.
+/// </summary>
+public interface IAgentRunContext : HoneyDrunk.Kernel.Abstractions.Agents.IAgentExecutionContext
 {
-    /// <summary>Gets the execution identifier.</summary>
+    /// <summary>Gets the execution id.</summary>
     string ExecutionId { get; }
 
-    /// <summary>Gets the effective grants for this execution.</summary>
+    /// <summary>Gets the effective grants: the registered grants narrowed for this execution.</summary>
     AgentGrants Grants { get; }
 
-    /// <summary>Gets the exact tool bindings registered for this agent.</summary>
+    /// <summary>Gets the tools the agent may call.</summary>
     IReadOnlyList<AgentToolBinding> ToolBindings { get; }
 
-    /// <summary>Gets access to tools for the lifetime of this execution.</summary>
+    /// <summary>Gets tool invocation for this execution.</summary>
     IToolInvoker Tools { get; }
 
-    /// <summary>Gets access to memory for the lifetime of this execution.</summary>
+    /// <summary>Gets scoped memory for this execution.</summary>
     IAgentMemory Memory { get; }
 }

@@ -1,5 +1,5 @@
 # HoneyDrunk.Agents.Abstractions
 
-Define an agent with `IAgent`. Its invocation receives an `IAgentRunContext` with effective grants, registered tool bindings, and scoped access to tools and memory. Hosts manage registration and execution through `IAgentLifecycle`.
+Contracts for HoneyDrunk Grid agents (ADR-0020): `IAgent`, `IAgentRunContext`, `IToolInvoker`, `IAgentMemory` and `IAgentLifecycle`, with the small records they use.
 
-The only HoneyDrunk dependency is Kernel.Abstractions. The runtime supplies lifecycle and authorization behavior in a separate package.
+The package references only `HoneyDrunk.Kernel.Abstractions`. It names no Capabilities, Memory, Operator or AI type, so consumers compile against agent contracts alone. The first four interfaces are frozen by a contract-shape canary; `IAgentLifecycle` is a host-facing surface outside it.
