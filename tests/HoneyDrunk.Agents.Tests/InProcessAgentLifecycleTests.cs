@@ -505,6 +505,38 @@ public sealed class InProcessAgentLifecycleTests
         Assert.Equal(AgentOutcome.Completed, afterwards.Outcome);
     }
 
+    /// <summary>An agent still running after its caller cancelled keeps its slot until its task ends.</summary>
+    [Fact]
+    public async Task Cancelled_but_running_agent_holds_its_slot()
+    {
+        using var fixture = new LifecycleFixture();
+        using var cancellation = new CancellationTokenSource();
+        var stuck = new TaskCompletionSource<AgentResult>();
+        var started = new TaskCompletionSource();
+        var calls = 0;
+        await fixture.ReadyAsync(new TestAgent((_, _) =>
+        {
+            if (++calls > 1)
+            {
+                return Task.FromResult(new AgentResult(AgentOutcome.Completed, null, null, null));
+            }
+
+            started.SetResult();
+            return stuck.Task;
+        }));
+
+        var first = fixture.Lifecycle.ExecuteAsync(InvokerFixture.AgentId, LifecycleFixture.Request(), LifecycleFixture.ExecutionOptions(), cancellation.Token);
+        await started.Task;
+        await cancellation.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
+        var whileStuck = await fixture.Lifecycle.ExecuteAsync(InvokerFixture.AgentId, LifecycleFixture.Request(), LifecycleFixture.ExecutionOptions());
+        stuck.SetResult(new AgentResult(AgentOutcome.Completed, null, null, null));
+        var afterwards = await fixture.Lifecycle.ExecuteAsync(InvokerFixture.AgentId, LifecycleFixture.Request(), LifecycleFixture.ExecutionOptions());
+
+        Assert.Equal("agent_busy", whileStuck.ReasonCode);
+        Assert.Equal(AgentOutcome.Completed, afterwards.Outcome);
+    }
+
     private class StopException(string message = "stop") : Exception(message);
 
     private sealed class ShiftingAgent : IAgent
