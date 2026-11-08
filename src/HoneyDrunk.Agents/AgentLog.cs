@@ -20,6 +20,9 @@ internal static partial class AgentLog
     [LoggerMessage(Level = LogLevel.Warning, Message = "Agent {AgentId} execution {ExecutionId} failed with {ExceptionType}")]
     public static partial void AgentFailed(ILogger logger, string agentId, string executionId, string exceptionType);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Agent {AgentId} is already running; the overlapping execution was refused")]
+    public static partial void AgentBusy(ILogger logger, string agentId);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Agent {AgentId} execution {ExecutionId} timed out")]
     public static partial void AgentTimedOut(ILogger logger, string agentId, string executionId);
 

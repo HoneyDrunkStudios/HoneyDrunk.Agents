@@ -12,6 +12,8 @@ internal sealed class TestBreaker : ICircuitBreaker
 
     public bool WaitUntilCancelled { get; set; }
 
+    public bool Hang { get; set; }
+
     public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public async Task<bool> IsAllowedAsync(string breakerName, CancellationToken cancellationToken = default)
@@ -20,6 +22,11 @@ internal sealed class TestBreaker : ICircuitBreaker
         if (this.Throw is not null)
         {
             throw this.Throw;
+        }
+
+        if (this.Hang)
+        {
+            await new TaskCompletionSource().Task;
         }
 
         if (this.WaitUntilCancelled)

@@ -40,7 +40,7 @@ Each execution runs in its own dependency-injection scope. Before the agent runs
 | The Operator breaker `agent:{agentId}` is closed | `Halted`, `breaker_open`; a breaker that throws gives `Failed`, `gate_error` |
 | Reading other projects is authorized by the Memory node | `Rejected`, `memory_escalation_denied`; a resolver that throws gives `Failed`, `memory_error` |
 
-The agent id and descriptor are captured at registration, so a descriptor that changes later cannot move an agent to another breaker or memory scope. Decommissioning refuses new executions; executions already running finish.
+An agent runs one execution at a time: an overlapping execution is refused with `Rejected`, `agent_busy`, and an agent abandoned at its deadline keeps the slot until its task really ends. The agent id and descriptor are captured at registration, so a descriptor that changes later cannot move an agent to another breaker or memory scope. Decommissioning refuses new executions; executions already running finish.
 
 The agent then runs under `ExecutionTimeout` (60 seconds by default), which starts before the breaker and memory checks, so a slow check also ends in `timeout`. Only a run that returns `Completed` completes Kernel's operation; any other returned outcome fails it. Whatever happens, the context, its tools and its memory are disposed, so an agent that keeps the context cannot act after the execution ends. An agent exception gives `Failed`, `agent_error`, and only its type name is logged. A timeout gives `Failed`, `timeout`. Caller cancellation propagates. An exception whose type is listed in `PropagatedExceptionTypes`, or derives from one, is rethrown unchanged after cleanup and never retried; use it for host stops such as a budget limit.
 

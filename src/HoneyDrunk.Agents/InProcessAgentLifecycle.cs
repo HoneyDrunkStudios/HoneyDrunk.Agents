@@ -114,6 +114,46 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
         ArgumentNullException.ThrowIfNull(options);
         var entry = this.Get(agentId);
         RequirePhase(entry, AgentLifecyclePhase.Initialized, "execute");
+
+        // One execution at a time per agent, as IAgent promises; an agent abandoned at its deadline keeps the slot
+        // until its task really ends.
+        if (!entry.TryEnter())
+        {
+            AgentLog.AgentBusy(this.logger, entry.AgentId);
+            return Refuse(AgentOutcome.Rejected, "agent_busy");
+        }
+
+        try
+        {
+            return await this.ExecuteAdmittedAsync(entry, request, options, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            entry.ExitUnlessDeferred();
+        }
+    }
+
+    /// <inheritdoc />
+    public Task DecommissionAsync(string agentId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var entry = this.Get(agentId);
+
+        // Executions already past the phase check finish; new ones are refused. Repeating is a no-op.
+        if (entry.TryMove(AgentLifecyclePhase.Initialized, AgentLifecyclePhase.Decommissioned)
+            || entry.TryMove(AgentLifecyclePhase.Registered, AgentLifecyclePhase.Decommissioned))
+        {
+            this.Notify(entry.AgentId, null, "decommission", null);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public AgentLifecyclePhase GetPhase(string agentId) => this.Get(agentId).Phase;
+
+    private async Task<AgentResult> ExecuteAdmittedAsync(Entry entry, AgentRequest request, AgentExecutionOptions options, CancellationToken cancellationToken)
+    {
         var executionId = Guid.CreateVersion7(this.timeProvider.GetUtcNow()).ToString("N");
         var scope = this.scopeFactory.CreateAsyncScope();
         await using (scope.ConfigureAwait(false))
@@ -156,25 +196,6 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
             }
         }
     }
-
-    /// <inheritdoc />
-    public Task DecommissionAsync(string agentId, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        var entry = this.Get(agentId);
-
-        // Executions already past the phase check finish; new ones are refused. Repeating is a no-op.
-        if (entry.TryMove(AgentLifecyclePhase.Initialized, AgentLifecyclePhase.Decommissioned)
-            || entry.TryMove(AgentLifecyclePhase.Registered, AgentLifecyclePhase.Decommissioned))
-        {
-            this.Notify(entry.AgentId, null, "decommission", null);
-        }
-
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc />
-    public AgentLifecyclePhase GetPhase(string agentId) => this.Get(agentId).Phase;
 
     private static void Validate(AgentRuntimeOptions options, Type[] propagated)
     {
@@ -266,7 +287,7 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
         var breaker = services.GetRequiredService<ICircuitBreaker>();
         try
         {
-            if (!await breaker.IsAllowedAsync(identity.BreakerName, deadline.Token).ConfigureAwait(false))
+            if (!await breaker.IsAllowedAsync(identity.BreakerName, deadline.Token).WaitAsync(deadline.Token).ConfigureAwait(false))
             {
                 return Refuse(AgentOutcome.Halted, "breaker_open");
             }
@@ -286,7 +307,7 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
         IMemoryScope read;
         try
         {
-            (home, read) = await AgentMemoryScopes.OpenAsync(services.GetRequiredService<IMemoryScopeResolver>(), identity, executionOptions.Memory, deadline.Token).ConfigureAwait(false);
+            (home, read) = await AgentMemoryScopes.OpenAsync(services.GetRequiredService<IMemoryScopeResolver>(), identity, executionOptions.Memory, deadline.Token).WaitAsync(deadline.Token).ConfigureAwait(false);
         }
         catch (MemoryEscalationDeniedException)
         {
@@ -317,11 +338,11 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
         using var operation = new AgentOperationContext(grid, "Agent:" + entry.AgentId, executionId, this.timeProvider);
         var kernel = services.GetRequiredService<IAgentExecutionContextFactory>().Create(entry.Descriptor, grid, operation);
         using var context = new AgentRunContext(kernel, identity, tools, memory);
-        return await this.RunAsync(entry.Registration.Agent, context, request, operation, timeout, deadline.Token, cancellationToken).ConfigureAwait(false);
+        return await this.RunAsync(entry, context, request, operation, timeout, deadline.Token, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<AgentResult> RunAsync(
-        IAgent agent,
+        Entry entry,
         AgentRunContext context,
         AgentRequest request,
         IOperationContext operation,
@@ -333,7 +354,7 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
         try
         {
             // WaitAsync stops waiting at the deadline even when an agent ignores its token; the context is then disposed.
-            running = agent.ExecuteAsync(context, request, deadline);
+            running = entry.Registration.Agent.ExecuteAsync(context, request, deadline);
             var result = await running.WaitAsync(deadline).ConfigureAwait(false);
             if (result is null)
             {
@@ -362,6 +383,7 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
         {
             AgentLog.AgentTimedOut(this.logger, context.AgentIdForLogs, context.ExecutionId);
             this.ObserveAbandoned(running, context);
+            entry.DeferExitUntil(running);
             operation.Fail("timeout");
             return Refuse(AgentOutcome.Failed, "timeout");
         }
@@ -430,6 +452,8 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
     private sealed class Entry(string agentId, IAgentDescriptor descriptor, AgentRegistration registration)
     {
         private int phase = (int)AgentLifecyclePhase.Registered;
+        private int busy;
+        private int deferred;
 
         public string AgentId { get; } = agentId;
 
@@ -438,6 +462,45 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
         public AgentRegistration Registration { get; } = registration;
 
         public AgentLifecyclePhase Phase => (AgentLifecyclePhase)Volatile.Read(ref this.phase);
+
+        /// <summary>Takes the agent's single execution slot, if it is free.</summary>
+        /// <returns>True when this caller now holds the slot.</returns>
+        public bool TryEnter()
+        {
+            if (Interlocked.CompareExchange(ref this.busy, 1, 0) != 0)
+            {
+                return false;
+            }
+
+            Volatile.Write(ref this.deferred, 0);
+            return true;
+        }
+
+        /// <summary>Keeps the slot until an abandoned agent task really ends.</summary>
+        /// <param name="running">The abandoned task.</param>
+        public void DeferExitUntil(Task? running)
+        {
+            if (running is null || running.IsCompleted)
+            {
+                return;
+            }
+
+            Volatile.Write(ref this.deferred, 1);
+            _ = running.ContinueWith(
+                _ => Volatile.Write(ref this.busy, 0),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+
+        /// <summary>Frees the slot, unless it is held for an abandoned agent task.</summary>
+        public void ExitUnlessDeferred()
+        {
+            if (Volatile.Read(ref this.deferred) == 0)
+            {
+                Volatile.Write(ref this.busy, 0);
+            }
+        }
 
         public bool TryMove(AgentLifecyclePhase from, AgentLifecyclePhase to) =>
             Interlocked.CompareExchange(ref this.phase, (int)to, (int)from) == (int)from;

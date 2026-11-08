@@ -442,6 +442,69 @@ public sealed class InProcessAgentLifecycleTests
         Assert.Equal(succeeded, Assert.Single(fixture.ContextFactory.Operations).IsSuccess);
     }
 
+    /// <summary>A pre-run check that ignores cancellation still ends at the deadline.</summary>
+    [Fact]
+    public async Task Deadline_bounds_a_check_that_ignores_cancellation()
+    {
+        using var fixture = new LifecycleFixture();
+        var agent = await fixture.ReadyAsync();
+        fixture.Breaker.Hang = true;
+
+        var execution = fixture.Lifecycle.ExecuteAsync(InvokerFixture.AgentId, LifecycleFixture.Request(), LifecycleFixture.ExecutionOptions());
+        await fixture.Breaker.Entered.Task;
+        fixture.Memory.Time.Advance(fixture.Options.ExecutionTimeout + TimeSpan.FromSeconds(1));
+        var result = await execution;
+
+        Assert.Equal("timeout", result.ReasonCode);
+        Assert.Equal(0, agent.Runs);
+    }
+
+    /// <summary>An agent runs one execution at a time; an overlapping one is refused.</summary>
+    [Fact]
+    public async Task Overlapping_execution_is_refused()
+    {
+        using var fixture = new LifecycleFixture();
+        var release = new TaskCompletionSource<AgentResult>();
+        var started = new TaskCompletionSource();
+        await fixture.ReadyAsync(new TestAgent((_, _) =>
+        {
+            started.TrySetResult();
+            return release.Task;
+        }));
+
+        var first = fixture.Lifecycle.ExecuteAsync(InvokerFixture.AgentId, LifecycleFixture.Request(), LifecycleFixture.ExecutionOptions());
+        await started.Task;
+        var second = await fixture.Lifecycle.ExecuteAsync(InvokerFixture.AgentId, LifecycleFixture.Request(), LifecycleFixture.ExecutionOptions());
+        release.SetResult(new AgentResult(AgentOutcome.Completed, null, null, null));
+        var firstResult = await first;
+
+        Assert.Equal(AgentOutcome.Rejected, second.Outcome);
+        Assert.Equal("agent_busy", second.ReasonCode);
+        Assert.Equal(AgentOutcome.Completed, firstResult.Outcome);
+    }
+
+    /// <summary>An agent abandoned at its deadline keeps its slot until its task really ends.</summary>
+    [Fact]
+    public async Task Abandoned_agent_holds_its_slot_until_it_ends()
+    {
+        using var fixture = new LifecycleFixture();
+        var stuck = new TaskCompletionSource<AgentResult>();
+        var calls = 0;
+        await fixture.ReadyAsync(new TestAgent((_, _) => ++calls == 1
+            ? stuck.Task
+            : Task.FromResult(new AgentResult(AgentOutcome.Completed, null, null, null))));
+
+        var first = fixture.Lifecycle.ExecuteAsync(InvokerFixture.AgentId, LifecycleFixture.Request(), LifecycleFixture.ExecutionOptions());
+        fixture.Memory.Time.Advance(fixture.Options.ExecutionTimeout + TimeSpan.FromSeconds(1));
+        Assert.Equal("timeout", (await first).ReasonCode);
+        var whileStuck = await fixture.Lifecycle.ExecuteAsync(InvokerFixture.AgentId, LifecycleFixture.Request(), LifecycleFixture.ExecutionOptions());
+        stuck.SetResult(new AgentResult(AgentOutcome.Completed, null, null, null));
+        var afterwards = await fixture.Lifecycle.ExecuteAsync(InvokerFixture.AgentId, LifecycleFixture.Request(), LifecycleFixture.ExecutionOptions());
+
+        Assert.Equal("agent_busy", whileStuck.ReasonCode);
+        Assert.Equal(AgentOutcome.Completed, afterwards.Outcome);
+    }
+
     private class StopException(string message = "stop") : Exception(message);
 
     private sealed class ShiftingAgent : IAgent
