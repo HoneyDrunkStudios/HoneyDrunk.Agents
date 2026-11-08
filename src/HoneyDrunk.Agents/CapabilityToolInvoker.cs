@@ -188,8 +188,13 @@ internal sealed class CapabilityToolInvoker : IToolInvoker, IDisposable
     private async Task<ToolCallResult?> ApproveAsync(CapabilityKey key, JsonElement arguments, Activity? activity, CancellationToken cancellationToken)
     {
         activity?.SetTag(AgentTelemetry.GateKindTag, "approval");
-        var requestKey = this.gates.Ledger.RequestKeyFor(this.identity.AgentId, key, arguments);
+        var requestKey = this.gates.Ledger.RequestKeyFor(this.identity.Tenant, this.identity.AgentId, key, arguments);
         var (open, opened) = this.gates.Ledger.GetOrOpen(requestKey, this.Expiry());
+        if (open is null)
+        {
+            return Fail(ToolCallStatus.Failed, "approval_capacity");
+        }
+
         if (opened)
         {
             return await this.RaiseAsync(key, requestKey, open, activity, cancellationToken).ConfigureAwait(false);
@@ -216,6 +221,11 @@ internal sealed class CapabilityToolInvoker : IToolInvoker, IDisposable
             default:
                 // Stale, unknown or already consumed: open a fresh approval, unless another call already did.
                 var (fresh, reopened) = this.gates.Ledger.Reopen(requestKey, open, this.Expiry());
+                if (fresh is null)
+                {
+                    return Fail(ToolCallStatus.Failed, "approval_capacity");
+                }
+
                 return reopened
                     ? await this.RaiseAsync(key, requestKey, fresh, activity, cancellationToken).ConfigureAwait(false)
                     : Fail(ToolCallStatus.AwaitingApproval, "approval_pending", fresh);

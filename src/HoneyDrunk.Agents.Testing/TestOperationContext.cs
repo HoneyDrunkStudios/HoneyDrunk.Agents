@@ -32,7 +32,7 @@ public sealed class TestOperationContext(IGridContext gridContext, string operat
     public string? ProjectId => this.GridContext.ProjectId;
 
     /// <inheritdoc />
-    public DateTimeOffset StartedAtUtc => TestAgentExecutionContext.FixedStart;
+    public DateTimeOffset StartedAtUtc => TestAgentRunContext.FixedStart;
 
     /// <inheritdoc />
     public DateTimeOffset? CompletedAtUtc { get; private set; }
@@ -53,7 +53,7 @@ public sealed class TestOperationContext(IGridContext gridContext, string operat
     public void Complete()
     {
         this.IsSuccess = true;
-        this.CompletedAtUtc = TestAgentExecutionContext.FixedStart;
+        this.CompletedAtUtc = TestAgentRunContext.FixedStart;
     }
 
     /// <inheritdoc />
@@ -61,7 +61,7 @@ public sealed class TestOperationContext(IGridContext gridContext, string operat
     {
         this.IsSuccess = false;
         this.ErrorMessage = errorMessage;
-        this.CompletedAtUtc = TestAgentExecutionContext.FixedStart;
+        this.CompletedAtUtc = TestAgentRunContext.FixedStart;
     }
 
     /// <inheritdoc />

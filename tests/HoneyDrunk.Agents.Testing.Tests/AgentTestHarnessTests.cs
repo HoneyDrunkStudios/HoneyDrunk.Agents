@@ -68,13 +68,13 @@ public sealed class AgentTestHarnessTests
     public async Task Scripted_agent_records_its_context()
     {
         var agent = new ScriptedAgent("agent-1");
-        var context = new TestAgentExecutionContext(agent.Descriptor);
+        var context = new TestAgentRunContext(agent.Descriptor);
 
         var result = await agent.ExecuteAsync(context, new AgentRequest("run", Json("{}")), CancellationToken.None);
 
         Assert.Equal(AgentOutcome.Completed, result.Outcome);
         Assert.Same(context, Assert.Single(agent.Contexts));
-        Assert.Equal(TestAgentExecutionContext.FixedStart, context.StartedAtUtc);
+        Assert.Equal(TestAgentRunContext.FixedStart, context.StartedAtUtc);
     }
 
     /// <summary>The in-memory tool invoker returns scripted results and records calls.</summary>

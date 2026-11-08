@@ -11,7 +11,7 @@ dotnet build HoneyDrunk.Agents.slnx -c Release
 dotnet test HoneyDrunk.Agents.slnx -c Release
 ```
 
-The contract-shape canary (`Category=ContractShape`) freezes `IAgent`, `IAgentExecutionContext`, `IToolInvoker`, `IAgentMemory` and every public type their signatures reach in `api/HoneyDrunk.Agents.Abstractions.contract-shape.txt` (Grid invariant 137). `IAgentLifecycle` is host-facing and outside it. To accept an intended shape change, raise `Version` in `Directory.Build.props` first, then regenerate and commit the baseline:
+The contract-shape canary (`Category=ContractShape`) freezes `IAgent`, `IAgentRunContext`, `IToolInvoker`, `IAgentMemory` and every public type their signatures reach in `api/HoneyDrunk.Agents.Abstractions.contract-shape.txt` (Grid invariant 137). `IAgentLifecycle` is host-facing and outside it. To accept an intended shape change, raise `Version` in `Directory.Build.props` first, then regenerate and commit the baseline:
 
 ```bash
 HONEYDRUNK_UPDATE_CONTRACT_SHAPE=1 dotnet test tests/HoneyDrunk.Agents.Abstractions.Tests -c Release --filter Category=ContractShape

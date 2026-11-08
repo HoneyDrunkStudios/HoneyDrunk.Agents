@@ -10,7 +10,7 @@ public sealed class ContractTests
     [Fact]
     public void Context_extends_the_kernel_context()
     {
-        Assert.Contains(typeof(HoneyDrunk.Kernel.Abstractions.Agents.IAgentExecutionContext), typeof(IAgentExecutionContext).GetInterfaces());
+        Assert.Contains(typeof(HoneyDrunk.Kernel.Abstractions.Agents.IAgentExecutionContext), typeof(IAgentRunContext).GetInterfaces());
     }
 
     /// <summary>The lifecycle and its records can change without a canary bump (ADR-0020 D10).</summary>

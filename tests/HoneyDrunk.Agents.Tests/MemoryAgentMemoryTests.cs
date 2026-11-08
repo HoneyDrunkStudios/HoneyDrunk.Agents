@@ -122,8 +122,8 @@ public sealed class MemoryAgentMemoryTests
     {
         var fixture = new MemoryFixture();
         var home = fixture.Resolver.ResolveAgentScope(new MemoryScopeKey(MemoryFixture.Tenant, MemoryFixture.ProjectA, InvokerFixture.AgentId), new MemoryCaller("agent:" + InvokerFixture.AgentId, [], []));
-        var identity = new ExecutionIdentity(InvokerFixture.AgentId, "exec-1", "corr-1", AgentGrants.None, []);
-        var memory = new MemoryAgentMemory(new WaitingStore(), home, home, identity, fixture.Telemetry, fixture.Log);
+        var identity = new ExecutionIdentity(InvokerFixture.AgentId, "exec-1", "corr-1", AgentGrants.None, [], MemoryFixture.Tenant);
+        using var memory = new MemoryAgentMemory(new WaitingStore(), home, home, identity, fixture.Telemetry, fixture.Log);
 
         var write = memory.RememberAsync(new AgentMemoryNote("note", "late", []));
         memory.Dispose();

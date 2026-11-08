@@ -15,14 +15,10 @@ public sealed class GrantingAuthorizationPolicy : IAuthorizationPolicy
     public Task<AuthorizationDecision> EvaluateAsync(AuthenticatedIdentity? identity, AuthorizationRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var reasons = new List<DenyReason>();
-        foreach (var scope in request.RequiredScopes)
-        {
-            if (identity is null || !identity.HasClaim(AuthClaimTypes.Scope, scope))
-            {
-                reasons.Add(new DenyReason(AuthorizationDenyCode.MissingScope, "missing scope"));
-            }
-        }
+        var reasons = request.RequiredScopes
+            .Where(scope => identity is null || !identity.HasClaim(AuthClaimTypes.Scope, scope))
+            .Select(_ => new DenyReason(AuthorizationDenyCode.MissingScope, "missing scope"))
+            .ToList();
 
         if (request.RequiredRoles.Count > 0 && (identity is null || !request.RequiredRoles.Any(role => identity.HasClaim(AuthClaimTypes.Role, role))))
         {

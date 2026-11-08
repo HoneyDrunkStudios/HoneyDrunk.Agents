@@ -1,6 +1,7 @@
 using HoneyDrunk.Agents.Abstractions;
 using HoneyDrunk.Capabilities.Abstractions;
 using HoneyDrunk.Capabilities.Testing;
+using HoneyDrunk.Kernel.Abstractions.Identity;
 using HoneyDrunk.Operator.Testing;
 using Microsoft.Extensions.Time.Testing;
 using System.Text.Json;
@@ -32,7 +33,7 @@ internal sealed class InvokerFixture
 
     public ScriptedApprovalGate Gate { get; } = new();
 
-    public ToolApprovalLedger Ledger { get; }
+    public ToolApprovalLedger Ledger { get; set; }
 
     public AgentRuntimeOptions Options { get; } = new();
 
@@ -53,9 +54,9 @@ internal sealed class InvokerFixture
     public static ToolCall Call(string arguments = """{"q":1}""", string name = CapabilityFixtures.Name, string version = CapabilityFixtures.Version) =>
         new(name, version, Json(arguments));
 
-    public CapabilityToolInvoker Create(string executionId = "exec-1") =>
+    public CapabilityToolInvoker Create(string executionId = "exec-1", TenantId? tenant = null) =>
         new(
-            new ExecutionIdentity(AgentId, executionId, "corr-1", this.Grants, this.Bindings),
+            new ExecutionIdentity(AgentId, executionId, "corr-1", this.Grants, this.Bindings, tenant ?? MemoryFixture.Tenant),
             this.Capabilities.Registry,
             this.Capabilities.Invoker,
             new OperatorGates(this.Breaker, this.Policy, this.Gate, this.Ledger),

@@ -27,7 +27,7 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
     private readonly IServiceScopeFactory scopeFactory;
     private readonly ToolApprovalLedger ledger;
     private readonly IAgentLifecycleObserver[] observers;
-    private readonly AgentRuntimeOptions options;
+    private readonly AgentRuntimeOptions runtimeOptions;
     private readonly Type[] propagated;
     private readonly TimeProvider timeProvider;
     private readonly ILogger<InProcessAgentLifecycle> logger;
@@ -51,11 +51,11 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
         this.scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
         this.ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
         this.observers = (observers ?? throw new ArgumentNullException(nameof(observers))).ToArray();
-        this.options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        this.runtimeOptions = options?.Value ?? throw new ArgumentNullException(nameof(options));
         this.timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
         this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        this.propagated = this.options.PropagatedExceptionTypes.ToArray();
-        Validate(this.options, this.propagated);
+        this.propagated = this.runtimeOptions.PropagatedExceptionTypes.ToArray();
+        Validate(this.runtimeOptions, this.propagated);
     }
 
     /// <inheritdoc />
@@ -258,14 +258,23 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
         }
 
         var registration = entry.Registration;
-        var identity = new ExecutionIdentity(entry.AgentId, executionId, grid.CorrelationId, registration.Grants.Narrow(executionOptions.NarrowGrantsTo), registration.Tools);
+        var identity = new ExecutionIdentity(entry.AgentId, executionId, grid.CorrelationId, registration.Grants.Narrow(executionOptions.NarrowGrantsTo), registration.Tools, grid.TenantId);
+
+        // The deadline covers the pre-run checks too, so a slow breaker or memory authorization cannot hold a run.
+        using var timeout = new CancellationTokenSource(this.runtimeOptions.ExecutionTimeout, this.timeProvider);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
         var breaker = services.GetRequiredService<ICircuitBreaker>();
         try
         {
-            if (!await breaker.IsAllowedAsync(identity.BreakerName, cancellationToken).ConfigureAwait(false))
+            if (!await breaker.IsAllowedAsync(identity.BreakerName, deadline.Token).ConfigureAwait(false))
             {
                 return Refuse(AgentOutcome.Halted, "breaker_open");
             }
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            AgentLog.AgentTimedOut(this.logger, entry.AgentId, executionId);
+            return Refuse(AgentOutcome.Failed, "timeout");
         }
         catch (Exception exception) when (this.IsRefusable(exception, cancellationToken))
         {
@@ -277,11 +286,16 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
         IMemoryScope read;
         try
         {
-            (home, read) = await AgentMemoryScopes.OpenAsync(services.GetRequiredService<IMemoryScopeResolver>(), identity, executionOptions.Memory, cancellationToken).ConfigureAwait(false);
+            (home, read) = await AgentMemoryScopes.OpenAsync(services.GetRequiredService<IMemoryScopeResolver>(), identity, executionOptions.Memory, deadline.Token).ConfigureAwait(false);
         }
         catch (MemoryEscalationDeniedException)
         {
             return Refuse(AgentOutcome.Rejected, "memory_escalation_denied");
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            AgentLog.AgentTimedOut(this.logger, entry.AgentId, executionId);
+            return Refuse(AgentOutcome.Failed, "timeout");
         }
         catch (Exception exception) when (this.IsRefusable(exception, cancellationToken))
         {
@@ -296,33 +310,47 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
             services.GetRequiredService<ICapabilityRegistry>(),
             services.GetRequiredService<ICapabilityInvoker>(),
             new OperatorGates(breaker, services.GetRequiredService<IDecisionPolicy>(), services.GetRequiredService<IApprovalGate>(), this.ledger),
-            this.options,
+            this.runtimeOptions,
             telemetry,
             this.logger,
             this.timeProvider);
         using var operation = new AgentOperationContext(grid, "Agent:" + entry.AgentId, executionId, this.timeProvider);
         var kernel = services.GetRequiredService<IAgentExecutionContextFactory>().Create(entry.Descriptor, grid, operation);
-        using var context = new AgentExecutionContext(kernel, identity, tools, memory);
-        return await this.RunAsync(entry.Registration.Agent, context, request, operation, cancellationToken).ConfigureAwait(false);
+        using var context = new AgentRunContext(kernel, identity, tools, memory);
+        return await this.RunAsync(entry.Registration.Agent, context, request, operation, timeout, deadline.Token, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<AgentResult> RunAsync(IAgent agent, AgentExecutionContext context, AgentRequest request, IOperationContext operation, CancellationToken cancellationToken)
+    private async Task<AgentResult> RunAsync(
+        IAgent agent,
+        AgentRunContext context,
+        AgentRequest request,
+        IOperationContext operation,
+        CancellationTokenSource timeout,
+        CancellationToken deadline,
+        CancellationToken cancellationToken)
     {
-        using var timeout = new CancellationTokenSource(this.options.ExecutionTimeout, this.timeProvider);
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
         Task<AgentResult>? running = null;
         try
         {
             // WaitAsync stops waiting at the deadline even when an agent ignores its token; the context is then disposed.
-            running = agent.ExecuteAsync(context, request, linked.Token);
-            var result = await running.WaitAsync(linked.Token).ConfigureAwait(false);
+            running = agent.ExecuteAsync(context, request, deadline);
+            var result = await running.WaitAsync(deadline).ConfigureAwait(false);
             if (result is null)
             {
                 operation.Fail("agent_error");
                 return Refuse(AgentOutcome.Failed, "agent_error");
             }
 
-            operation.Complete();
+            // Only a completed run completes the Kernel operation, so the two never disagree.
+            if (result.Outcome == AgentOutcome.Completed)
+            {
+                operation.Complete();
+            }
+            else
+            {
+                operation.Fail(result.Outcome.ToString());
+            }
+
             return result;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -353,7 +381,7 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
     }
 
     // An agent abandoned at its deadline may still fault later; observe it so the fault is logged, not lost.
-    private void ObserveAbandoned(Task<AgentResult>? running, AgentExecutionContext context)
+    private void ObserveAbandoned(Task<AgentResult>? running, AgentRunContext context)
     {
         if (running is null || running.IsCompleted)
         {

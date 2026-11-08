@@ -49,7 +49,7 @@ internal sealed class MemoryFixture
 
     public async Task<MemoryAgentMemory> OpenAsync(AgentMemoryBinding binding, params string[] scopes)
     {
-        var identity = new ExecutionIdentity(InvokerFixture.AgentId, "exec-1", "corr-1", new AgentGrants(scopes, []), []);
+        var identity = new ExecutionIdentity(InvokerFixture.AgentId, "exec-1", "corr-1", new AgentGrants(scopes, []), [], MemoryFixture.Tenant);
         var (home, read) = await AgentMemoryScopes.OpenAsync(this.Resolver, identity, binding, CancellationToken.None);
         return new MemoryAgentMemory(this.Store, home, read, identity, this.Telemetry, this.Log);
     }

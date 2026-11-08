@@ -24,7 +24,7 @@ internal sealed class TestKernelAgentContext(
 
     public IOperationContext OperationContext { get; } = operationContext;
 
-    public DateTimeOffset StartedAtUtc => TestAgentExecutionContext.FixedStart;
+    public DateTimeOffset StartedAtUtc => TestAgentRunContext.FixedStart;
 
     public IReadOnlyDictionary<string, object?> ExecutionMetadata => this.metadata;
 

@@ -13,7 +13,7 @@ public sealed class ContractShapeTests
     internal static Type[] Roots { get; } =
     [
         typeof(IAgent),
-        typeof(IAgentExecutionContext),
+        typeof(IAgentRunContext),
         typeof(IToolInvoker),
         typeof(IAgentMemory),
     ];

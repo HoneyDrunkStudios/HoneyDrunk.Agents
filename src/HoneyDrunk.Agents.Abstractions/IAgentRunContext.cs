@@ -5,7 +5,7 @@ namespace HoneyDrunk.Agents.Abstractions;
 /// and scoped memory. It holds execution-scoped state only and is disposed when the execution completes; Kernel's
 /// <c>ExecutionMetadata</c> carries short-term working state.
 /// </summary>
-public interface IAgentExecutionContext : HoneyDrunk.Kernel.Abstractions.Agents.IAgentExecutionContext
+public interface IAgentRunContext : HoneyDrunk.Kernel.Abstractions.Agents.IAgentExecutionContext
 {
     /// <summary>Gets the execution id.</summary>
     string ExecutionId { get; }

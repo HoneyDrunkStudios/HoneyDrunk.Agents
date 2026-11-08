@@ -1,19 +1,18 @@
 using HoneyDrunk.Agents.Abstractions;
 using HoneyDrunk.Kernel.Abstractions.Agents;
-using IAgentExecutionContext = HoneyDrunk.Agents.Abstractions.IAgentExecutionContext;
 
 namespace HoneyDrunk.Agents.Testing;
 
 /// <summary>An agent that runs a delegate and records each context it was given.</summary>
 public sealed class ScriptedAgent : IAgent
 {
-    private readonly Func<IAgentExecutionContext, CancellationToken, Task<AgentResult>>? run;
-    private readonly List<IAgentExecutionContext> contexts = [];
+    private readonly Func<IAgentRunContext, CancellationToken, Task<AgentResult>>? run;
+    private readonly List<IAgentRunContext> contexts = [];
 
     /// <summary>Initializes a new instance of the <see cref="ScriptedAgent"/> class.</summary>
     /// <param name="agentId">The agent id.</param>
     /// <param name="run">What each execution does; by default it completes with no output.</param>
-    public ScriptedAgent(string agentId, Func<IAgentExecutionContext, CancellationToken, Task<AgentResult>>? run = null)
+    public ScriptedAgent(string agentId, Func<IAgentRunContext, CancellationToken, Task<AgentResult>>? run = null)
     {
         this.Descriptor = new AgentDescriptor(agentId, agentId, "scripted", "1.0.0");
         this.run = run;
@@ -23,7 +22,7 @@ public sealed class ScriptedAgent : IAgent
     public IAgentDescriptor Descriptor { get; }
 
     /// <summary>Gets the contexts the agent was given, in order.</summary>
-    public IReadOnlyList<IAgentExecutionContext> Contexts
+    public IReadOnlyList<IAgentRunContext> Contexts
     {
         get
         {
@@ -35,7 +34,7 @@ public sealed class ScriptedAgent : IAgent
     }
 
     /// <inheritdoc />
-    public Task<AgentResult> ExecuteAsync(IAgentExecutionContext context, AgentRequest request, CancellationToken cancellationToken)
+    public Task<AgentResult> ExecuteAsync(IAgentRunContext context, AgentRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
         lock (this.contexts)

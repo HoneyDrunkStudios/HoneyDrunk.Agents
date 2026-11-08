@@ -162,7 +162,7 @@ public sealed class AgentRecordTests
     {
         public IAgentDescriptor Descriptor { get; } = new AgentDescriptor("stub", "Stub", "stub", "1.0.0");
 
-        public Task<AgentResult> ExecuteAsync(IAgentExecutionContext context, AgentRequest request, CancellationToken cancellationToken) =>
+        public Task<AgentResult> ExecuteAsync(IAgentRunContext context, AgentRequest request, CancellationToken cancellationToken) =>
             Task.FromResult(new AgentResult(AgentOutcome.Completed, null, null, null));
     }
 }

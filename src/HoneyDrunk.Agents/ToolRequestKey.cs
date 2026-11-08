@@ -1,4 +1,5 @@
 using HoneyDrunk.Capabilities.Abstractions;
+using HoneyDrunk.Kernel.Abstractions.Identity;
 using System.Buffers;
 using System.Security.Cryptography;
 using System.Text;
@@ -8,7 +9,7 @@ namespace HoneyDrunk.Agents;
 
 /// <summary>
 /// A stable key for one tool call: <c>tool-</c> plus the first 32 hex characters of HMAC-SHA-256, under a per-host
-/// secret, over the agent id, the tool key and the canonical arguments (object keys sorted ordinally at every depth,
+/// secret, over the tenant, the agent id, the tool key and the canonical arguments (object keys sorted ordinally at every depth,
 /// no whitespace). The secret keeps the key from being used to guess low-entropy arguments.
 /// </summary>
 internal static class ToolRequestKey
@@ -17,16 +18,17 @@ internal static class ToolRequestKey
 
     /// <summary>Computes the key.</summary>
     /// <param name="secret">The per-host HMAC key.</param>
+    /// <param name="tenant">The grid tenant; an approval never crosses tenants.</param>
     /// <param name="agentId">The agent id.</param>
     /// <param name="key">The tool key.</param>
     /// <param name="arguments">The arguments.</param>
     /// <returns>The request key.</returns>
-    public static string For(byte[] secret, string agentId, CapabilityKey key, JsonElement arguments)
+    public static string For(byte[] secret, TenantId tenant, string agentId, CapabilityKey key, JsonElement arguments)
     {
         ArgumentNullException.ThrowIfNull(secret);
         ArgumentException.ThrowIfNullOrWhiteSpace(agentId);
         var buffer = new ArrayBufferWriter<byte>();
-        buffer.Write(Encoding.UTF8.GetBytes(agentId + Separator + key.Name + Separator + key.Version + Separator));
+        buffer.Write(Encoding.UTF8.GetBytes(tenant.ToString() + Separator + agentId + Separator + key.Name + Separator + key.Version + Separator));
         using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = false }))
         {
             WriteCanonical(writer, arguments);

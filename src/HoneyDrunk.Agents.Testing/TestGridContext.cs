@@ -41,7 +41,7 @@ public sealed class TestGridContext(TenantId tenantId, bool initialized = true) 
     public IReadOnlyDictionary<string, string> Baggage => this.baggage;
 
     /// <inheritdoc />
-    public DateTimeOffset CreatedAtUtc { get; init; } = TestAgentExecutionContext.FixedStart;
+    public DateTimeOffset CreatedAtUtc { get; init; } = TestAgentRunContext.FixedStart;
 
     /// <inheritdoc />
     public void AddBaggage(string key, string value) => this.baggage[key] = value;

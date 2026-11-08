@@ -4,7 +4,6 @@ using HoneyDrunk.Kernel.Abstractions.Agents;
 using HoneyDrunk.Kernel.Abstractions.Identity;
 using HoneyDrunk.Operator.Abstractions;
 using Xunit;
-using IAgentExecutionContext = HoneyDrunk.Agents.Abstractions.IAgentExecutionContext;
 
 namespace HoneyDrunk.Agents.Tests;
 
@@ -407,6 +406,42 @@ public sealed class InProcessAgentLifecycleTests
         Assert.False(Assert.Single(fixture.ContextFactory.Operations).IsSuccess);
     }
 
+    /// <summary>The execution deadline also covers the pre-run checks.</summary>
+    [Fact]
+    public async Task Deadline_covers_pre_run_checks()
+    {
+        using var fixture = new LifecycleFixture();
+        var agent = await fixture.ReadyAsync();
+        fixture.Breaker.WaitUntilCancelled = true;
+
+        var execution = fixture.Lifecycle.ExecuteAsync(InvokerFixture.AgentId, LifecycleFixture.Request(), LifecycleFixture.ExecutionOptions());
+        await fixture.Breaker.Entered.Task;
+        fixture.Memory.Time.Advance(fixture.Options.ExecutionTimeout + TimeSpan.FromSeconds(1));
+        var result = await execution;
+
+        Assert.Equal(AgentOutcome.Failed, result.Outcome);
+        Assert.Equal("timeout", result.ReasonCode);
+        Assert.Equal(0, agent.Runs);
+    }
+
+    /// <summary>A returned failure fails the Kernel operation too; only a completed run completes it.</summary>
+    /// <param name="outcome">The outcome the agent returns.</param>
+    /// <param name="succeeded">Whether the operation should complete successfully.</param>
+    [Theory]
+    [InlineData(AgentOutcome.Completed, true)]
+    [InlineData(AgentOutcome.Failed, false)]
+    [InlineData(AgentOutcome.Halted, false)]
+    [InlineData(AgentOutcome.Rejected, false)]
+    public async Task Operation_status_agrees_with_the_returned_outcome(AgentOutcome outcome, bool succeeded)
+    {
+        using var fixture = new LifecycleFixture();
+        await fixture.ReadyAsync(new TestAgent((_, _) => Task.FromResult(new AgentResult(outcome, null, "agent_code", null))));
+
+        await fixture.Lifecycle.ExecuteAsync(InvokerFixture.AgentId, LifecycleFixture.Request(), LifecycleFixture.ExecutionOptions());
+
+        Assert.Equal(succeeded, Assert.Single(fixture.ContextFactory.Operations).IsSuccess);
+    }
+
     private class StopException(string message = "stop") : Exception(message);
 
     private sealed class ShiftingAgent : IAgent
@@ -417,7 +452,7 @@ public sealed class InProcessAgentLifecycleTests
 
         public void Shift() => this.descriptor = new AgentDescriptor("someone-else", "Shifting", "test", "1.0.0");
 
-        public Task<AgentResult> ExecuteAsync(IAgentExecutionContext context, AgentRequest request, CancellationToken cancellationToken) =>
+        public Task<AgentResult> ExecuteAsync(IAgentRunContext context, AgentRequest request, CancellationToken cancellationToken) =>
             Task.FromResult(new AgentResult(AgentOutcome.Completed, null, null, null));
     }
 
@@ -427,7 +462,7 @@ public sealed class InProcessAgentLifecycleTests
     {
         public IAgentDescriptor Descriptor { get; } = new BadDescriptor();
 
-        public Task<AgentResult> ExecuteAsync(IAgentExecutionContext context, AgentRequest request, CancellationToken cancellationToken) =>
+        public Task<AgentResult> ExecuteAsync(IAgentRunContext context, AgentRequest request, CancellationToken cancellationToken) =>
             Task.FromResult(new AgentResult(AgentOutcome.Completed, null, null, null));
     }
 

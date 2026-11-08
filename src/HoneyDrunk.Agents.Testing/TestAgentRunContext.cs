@@ -2,7 +2,6 @@ using HoneyDrunk.Agents.Abstractions;
 using HoneyDrunk.Kernel.Abstractions.Agents;
 using HoneyDrunk.Kernel.Abstractions.Context;
 using HoneyDrunk.Kernel.Abstractions.Identity;
-using IAgentExecutionContext = HoneyDrunk.Agents.Abstractions.IAgentExecutionContext;
 
 namespace HoneyDrunk.Agents.Testing;
 
@@ -10,17 +9,17 @@ namespace HoneyDrunk.Agents.Testing;
 /// An execution context for calling an agent directly in a unit test, without the lifecycle. It starts at
 /// <see cref="FixedStart"/> and uses in-memory tools and memory unless others are given.
 /// </summary>
-public sealed class TestAgentExecutionContext : IAgentExecutionContext
+public sealed class TestAgentRunContext : IAgentRunContext
 {
     private readonly Dictionary<string, object?> metadata = new(StringComparer.Ordinal);
 
-    /// <summary>Initializes a new instance of the <see cref="TestAgentExecutionContext"/> class.</summary>
+    /// <summary>Initializes a new instance of the <see cref="TestAgentRunContext"/> class.</summary>
     /// <param name="agent">The agent descriptor.</param>
     /// <param name="tools">The tools; an empty <see cref="InMemoryToolInvoker"/> by default.</param>
     /// <param name="memory">The memory; an empty <see cref="InMemoryAgentMemory"/> by default.</param>
     /// <param name="grants">The grants; none by default.</param>
     /// <param name="toolBindings">The tool bindings; none by default.</param>
-    public TestAgentExecutionContext(
+    public TestAgentRunContext(
         IAgentDescriptor agent,
         IToolInvoker? tools = null,
         IAgentMemory? memory = null,

@@ -1,6 +1,7 @@
 using HoneyDrunk.Agents.Abstractions;
 using HoneyDrunk.Capabilities.Abstractions;
 using HoneyDrunk.Capabilities.Testing;
+using HoneyDrunk.Kernel.Abstractions.Identity;
 using HoneyDrunk.Operator.Abstractions;
 using Xunit;
 
@@ -222,24 +223,15 @@ public sealed class CapabilityToolInvokerTests
             fixture.Gate.Decide(waiting.ApprovalId!, ApprovalOutcome.Approved);
         }
 
-        var invokers = Enumerable.Range(1, 8).Select(index => fixture.Create("exec-" + index)).ToArray();
-        try
-        {
-            var results = await Task.WhenAll(invokers.Select(invoker => Task.Run(() => invoker.InvokeAsync(InvokerFixture.Call()))));
+        using var group = new InvokerGroup(fixture, 8);
 
-            Assert.Single(results, result => result.Status == ToolCallStatus.Succeeded);
-            Assert.Single(fixture.Handler.Invocations);
+        var results = await group.InvokeAllAsync();
 
-            // The first request, plus one fresh request for the losers; never one per loser.
-            Assert.Equal(2, fixture.Gate.Received.Count);
-        }
-        finally
-        {
-            foreach (var invoker in invokers)
-            {
-                invoker.Dispose();
-            }
-        }
+        Assert.Single(results, result => result.Status == ToolCallStatus.Succeeded);
+        Assert.Single(fixture.Handler.Invocations);
+
+        // The first request, plus one fresh request for the losers; never one per loser.
+        Assert.Equal(2, fixture.Gate.Received.Count);
     }
 
     /// <summary>A denied call is not asked again until its approval expires.</summary>
@@ -283,10 +275,10 @@ public sealed class CapabilityToolInvokerTests
         var ledger = new ToolApprovalLedger(TimeProvider.System);
         var key = new CapabilityKey("test-tool", "1.0.0");
 
-        var one = ledger.RequestKeyFor("agent-1", key, InvokerFixture.Json("""{"a":1,"b":{"c":2,"d":[3,{"f":1,"e":2}]}}"""));
-        var two = ledger.RequestKeyFor("agent-1", key, InvokerFixture.Json("""{ "b": {"d":[3,{"e":2,"f":1}],"c":2}, "a":1 }"""));
-        var other = ledger.RequestKeyFor("agent-1", key, InvokerFixture.Json("""{"a":2,"b":{"c":2,"d":[3,{"f":1,"e":2}]}}"""));
-        var otherAgent = ledger.RequestKeyFor("agent-2", key, InvokerFixture.Json("""{"a":1,"b":{"c":2,"d":[3,{"f":1,"e":2}]}}"""));
+        var one = ledger.RequestKeyFor(MemoryFixture.Tenant, "agent-1", key, InvokerFixture.Json("""{"a":1,"b":{"c":2,"d":[3,{"f":1,"e":2}]}}"""));
+        var two = ledger.RequestKeyFor(MemoryFixture.Tenant, "agent-1", key, InvokerFixture.Json("""{ "b": {"d":[3,{"e":2,"f":1}],"c":2}, "a":1 }"""));
+        var other = ledger.RequestKeyFor(MemoryFixture.Tenant, "agent-1", key, InvokerFixture.Json("""{"a":2,"b":{"c":2,"d":[3,{"f":1,"e":2}]}}"""));
+        var otherAgent = ledger.RequestKeyFor(MemoryFixture.Tenant, "agent-2", key, InvokerFixture.Json("""{"a":1,"b":{"c":2,"d":[3,{"f":1,"e":2}]}}"""));
 
         Assert.Equal(one, two);
         Assert.NotEqual(one, other);
@@ -301,8 +293,8 @@ public sealed class CapabilityToolInvokerTests
         var key = new CapabilityKey("test-tool", "1.0.0");
         var arguments = InvokerFixture.Json("""{"amount":5}""");
 
-        var one = new ToolApprovalLedger(TimeProvider.System).RequestKeyFor("agent-1", key, arguments);
-        var two = new ToolApprovalLedger(TimeProvider.System).RequestKeyFor("agent-1", key, arguments);
+        var one = new ToolApprovalLedger(TimeProvider.System).RequestKeyFor(MemoryFixture.Tenant, "agent-1", key, arguments);
+        var two = new ToolApprovalLedger(TimeProvider.System).RequestKeyFor(MemoryFixture.Tenant, "agent-1", key, arguments);
 
         Assert.NotEqual(one, two);
     }
@@ -313,21 +305,12 @@ public sealed class CapabilityToolInvokerTests
     {
         var fixture = new InvokerFixture();
         fixture.Policy.Outcome = PolicyOutcome.RequireApproval;
-        var invokers = Enumerable.Range(1, 8).Select(index => fixture.Create("exec-" + index)).ToArray();
-        try
-        {
-            var results = await Task.WhenAll(invokers.Select(invoker => Task.Run(() => invoker.InvokeAsync(InvokerFixture.Call()))));
+        using var group = new InvokerGroup(fixture, 8);
 
-            Assert.Single(fixture.Gate.Received);
-            Assert.All(results, result => Assert.Equal(fixture.Gate.Received[0].ApprovalId, result.ApprovalId));
-        }
-        finally
-        {
-            foreach (var invoker in invokers)
-            {
-                invoker.Dispose();
-            }
-        }
+        var results = await group.InvokeAllAsync();
+
+        Assert.Single(fixture.Gate.Received);
+        Assert.All(results, result => Assert.Equal(fixture.Gate.Received[0].ApprovalId, result.ApprovalId));
     }
 
     /// <summary>An approval that arrives after the execution ended never dispatches.</summary>
@@ -338,7 +321,7 @@ public sealed class CapabilityToolInvokerTests
         fixture.Policy.Outcome = PolicyOutcome.RequireApproval;
         fixture.Gate.DefaultOutcome = ApprovalOutcome.Approved;
         fixture.Gate.Hold = new TaskCompletionSource();
-        var invoker = fixture.Create();
+        using var invoker = fixture.Create();
 
         var call = invoker.InvokeAsync(InvokerFixture.Call());
         invoker.Dispose();
@@ -428,7 +411,7 @@ public sealed class CapabilityToolInvokerTests
         var harness = new CapabilityTestHarness(ScriptedCapabilityGuard.RequireScopes());
         harness.Register(CapabilityFixtures.Descriptor(), fixture.Handler);
         using var invoker = new CapabilityToolInvoker(
-            new ExecutionIdentity(InvokerFixture.AgentId, "exec-1", "corr-1", fixture.Grants, fixture.Bindings),
+            new ExecutionIdentity(InvokerFixture.AgentId, "exec-1", "corr-1", fixture.Grants, fixture.Bindings, MemoryFixture.Tenant),
             harness.Registry,
             harness.Invoker,
             new OperatorGates(fixture.Breaker, fixture.Policy, fixture.Gate, fixture.Ledger),
@@ -490,6 +473,104 @@ public sealed class CapabilityToolInvokerTests
         Assert.Contains(fixture.Telemetry.Tags, tag => tag.Key == "tool.name" && Equals(tag.Value, "unbound"));
         Assert.DoesNotContain(fixture.Telemetry.Tags, tag => (tag.Value?.ToString() ?? string.Empty).Contains(Sentinel, StringComparison.Ordinal));
         Assert.DoesNotContain(fixture.Log.Entries, entry => entry.message.Contains(Sentinel, StringComparison.Ordinal));
+    }
+
+    /// <summary>An approval that has expired is never consumed, even if the gate later answers Approved.</summary>
+    [Fact]
+    public void Expired_approval_is_not_consumed()
+    {
+        var fixture = new InvokerFixture();
+        var (approvalId, _) = fixture.Ledger.GetOrOpen("tool-key", fixture.Time.GetUtcNow().AddMinutes(1));
+        fixture.Time.Advance(TimeSpan.FromMinutes(2));
+
+        Assert.False(fixture.Ledger.TryConsume("tool-key", approvalId!));
+    }
+
+    /// <summary>A gate reply that arrives after the approval expired never dispatches.</summary>
+    [Fact]
+    public async Task Late_approval_after_expiry_never_dispatches()
+    {
+        var fixture = new InvokerFixture();
+        fixture.Policy.Outcome = PolicyOutcome.RequireApproval;
+        fixture.Gate.DefaultOutcome = ApprovalOutcome.Approved;
+        fixture.Gate.Hold = new TaskCompletionSource();
+        using var invoker = fixture.Create();
+
+        var call = invoker.InvokeAsync(InvokerFixture.Call());
+        fixture.Time.Advance(fixture.Options.ToolApprovalTtl + TimeSpan.FromSeconds(1));
+        fixture.Gate.Hold.SetResult();
+        var result = await call;
+
+        Assert.Equal(ToolCallStatus.AwaitingApproval, result.Status);
+        Assert.Empty(fixture.Handler.Invocations);
+    }
+
+    /// <summary>One tenant's approval never authorizes another tenant's identical call.</summary>
+    [Fact]
+    public async Task Approval_is_scoped_to_the_tenant()
+    {
+        var fixture = new InvokerFixture();
+        fixture.Policy.Outcome = PolicyOutcome.RequireApproval;
+        using var tenantA = fixture.Create("exec-a", MemoryFixture.Tenant);
+        var waiting = await tenantA.InvokeAsync(InvokerFixture.Call());
+        fixture.Gate.Decide(waiting.ApprovalId!, ApprovalOutcome.Approved);
+
+        using var tenantB = fixture.Create("exec-b", new TenantId("01JC0000000000000000000009"));
+        var other = await tenantB.InvokeAsync(InvokerFixture.Call());
+
+        Assert.Equal(ToolCallStatus.AwaitingApproval, other.Status);
+        Assert.NotEqual(waiting.ApprovalId, other.ApprovalId);
+        Assert.Empty(fixture.Handler.Invocations);
+    }
+
+    /// <summary>A full ledger refuses new approvals without dropping live ones.</summary>
+    [Fact]
+    public void Saturated_ledger_refuses_new_approvals_and_keeps_live_ones()
+    {
+        var fixture = new InvokerFixture();
+        var ledger = new ToolApprovalLedger(fixture.Time, capacity: 2);
+        var expiry = fixture.Time.GetUtcNow().AddHours(1);
+        ledger.GetOrOpen("key-1", expiry);
+        ledger.GetOrOpen("key-2", expiry);
+
+        var (third, opened) = ledger.GetOrOpen("key-3", expiry);
+
+        Assert.Null(third);
+        Assert.False(opened);
+        Assert.NotNull(ledger.OpenApprovalFor("key-1"));
+        Assert.NotNull(ledger.OpenApprovalFor("key-2"));
+    }
+
+    /// <summary>A full ledger frees expired entries before refusing.</summary>
+    [Fact]
+    public void Saturated_ledger_reuses_expired_slots()
+    {
+        var fixture = new InvokerFixture();
+        var ledger = new ToolApprovalLedger(fixture.Time, capacity: 1);
+        ledger.GetOrOpen("key-1", fixture.Time.GetUtcNow().AddMinutes(1));
+        fixture.Time.Advance(TimeSpan.FromMinutes(2));
+
+        var (second, opened) = ledger.GetOrOpen("key-2", fixture.Time.GetUtcNow().AddMinutes(1));
+
+        Assert.NotNull(second);
+        Assert.True(opened);
+    }
+
+    /// <summary>A call that needs an approval when the ledger is full fails safely.</summary>
+    [Fact]
+    public async Task Saturated_ledger_fails_the_call_safely()
+    {
+        var fixture = new InvokerFixture();
+        fixture.Policy.Outcome = PolicyOutcome.RequireApproval;
+        fixture.Ledger = new ToolApprovalLedger(fixture.Time, capacity: 1);
+        using var invoker = fixture.Create();
+
+        await invoker.InvokeAsync(InvokerFixture.Call("""{"q":1}"""));
+        var full = await invoker.InvokeAsync(InvokerFixture.Call("""{"q":2}"""));
+
+        Assert.Equal(ToolCallStatus.Failed, full.Status);
+        Assert.Equal("approval_capacity", full.ErrorCode);
+        Assert.Single(fixture.Gate.Received);
     }
 
     /// <summary>Using the invoker after its execution ends throws.</summary>

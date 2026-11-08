@@ -13,5 +13,5 @@ public interface IAgent
     /// <param name="request">What the execution is asked to do.</param>
     /// <param name="cancellationToken">Cancels the execution.</param>
     /// <returns>The result.</returns>
-    Task<AgentResult> ExecuteAsync(IAgentExecutionContext context, AgentRequest request, CancellationToken cancellationToken);
+    Task<AgentResult> ExecuteAsync(IAgentRunContext context, AgentRequest request, CancellationToken cancellationToken);
 }

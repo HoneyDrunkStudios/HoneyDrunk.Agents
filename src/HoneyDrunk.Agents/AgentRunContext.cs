@@ -1,7 +1,6 @@
 using HoneyDrunk.Agents.Abstractions;
 using HoneyDrunk.Kernel.Abstractions.Agents;
 using HoneyDrunk.Kernel.Abstractions.Context;
-using IAgentExecutionContext = HoneyDrunk.Agents.Abstractions.IAgentExecutionContext;
 
 namespace HoneyDrunk.Agents;
 
@@ -9,19 +8,19 @@ namespace HoneyDrunk.Agents;
 /// One execution's context: Kernel's agent context plus the execution's bindings. After disposal, tools and memory
 /// throw <see cref="ObjectDisposedException"/>, so an agent that keeps the context cannot act after it completes.
 /// </summary>
-internal sealed class AgentExecutionContext : IAgentExecutionContext, IDisposable
+internal sealed class AgentRunContext : IAgentRunContext, IDisposable
 {
     private readonly HoneyDrunk.Kernel.Abstractions.Agents.IAgentExecutionContext inner;
     private readonly CapabilityToolInvoker tools;
     private readonly MemoryAgentMemory memory;
     private int disposed;
 
-    /// <summary>Initializes a new instance of the <see cref="AgentExecutionContext"/> class.</summary>
+    /// <summary>Initializes a new instance of the <see cref="AgentRunContext"/> class.</summary>
     /// <param name="inner">Kernel's agent context.</param>
     /// <param name="identity">Who the execution acts as.</param>
     /// <param name="tools">The execution's tool invoker.</param>
     /// <param name="memory">The execution's memory.</param>
-    public AgentExecutionContext(
+    public AgentRunContext(
         HoneyDrunk.Kernel.Abstractions.Agents.IAgentExecutionContext inner,
         ExecutionIdentity identity,
         CapabilityToolInvoker tools,

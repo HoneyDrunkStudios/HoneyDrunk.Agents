@@ -29,7 +29,7 @@ public sealed class AgentTestHarness : IDisposable
     /// <param name="timeProvider">The clock; a <see cref="FakeTimeProvider"/> at a fixed instant by default.</param>
     public AgentTestHarness(Action<AgentRuntimeOptions>? configure = null, TimeProvider? timeProvider = null)
     {
-        this.Time = timeProvider ?? new FakeTimeProvider(TestAgentExecutionContext.FixedStart);
+        this.Time = timeProvider ?? new FakeTimeProvider(TestAgentRunContext.FixedStart);
         this.Gate = new InMemoryApprovalGate(this.Time);
         this.MemoryProvider = new InMemoryMemoryStore(this.Time);
         var telemetry = new NullTelemetryActivityFactory();

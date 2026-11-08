@@ -6,9 +6,9 @@ The HoneyDrunk Grid's agent runtime: how an agent is registered, given a context
 
 | Package | Use it from | Holds |
 |---|---|---|
-| `HoneyDrunk.Agents.Abstractions` | Any code that implements or calls an agent | `IAgent`, `IAgentExecutionContext`, `IToolInvoker`, `IAgentMemory`, `IAgentLifecycle`, and records such as `AgentDescriptor`, `AgentGrants`, `ToolCall`, `AgentResult` and `AgentMemoryBinding`. It references only `HoneyDrunk.Kernel.Abstractions`. |
+| `HoneyDrunk.Agents.Abstractions` | Any code that implements or calls an agent | `IAgent`, `IAgentRunContext`, `IToolInvoker`, `IAgentMemory`, `IAgentLifecycle`, and records such as `AgentDescriptor`, `AgentGrants`, `ToolCall`, `AgentResult` and `AgentMemoryBinding`. It references only `HoneyDrunk.Kernel.Abstractions`. |
 | `HoneyDrunk.Agents` | The host's composition root only | `InProcessAgentLifecycle`, `ToolApprovalLedger`, `AgentRuntimeOptions`, `IAgentLifecycleObserver` and `AddHoneyDrunkAgents`. |
-| `HoneyDrunk.Agents.Testing` | Test projects only | `AgentTestHarness` over the real runtime, `ScriptedAgent`, `InMemoryToolInvoker`, `InMemoryAgentMemory`, `TestAgentExecutionContext` and deterministic Kernel contexts. |
+| `HoneyDrunk.Agents.Testing` | Test projects only | `AgentTestHarness` over the real runtime, `ScriptedAgent`, `InMemoryToolInvoker`, `InMemoryAgentMemory`, `TestAgentRunContext` and deterministic Kernel contexts. |
 
 ## Hosting
 
@@ -42,7 +42,7 @@ Each execution runs in its own dependency-injection scope. Before the agent runs
 
 The agent id and descriptor are captured at registration, so a descriptor that changes later cannot move an agent to another breaker or memory scope. Decommissioning refuses new executions; executions already running finish.
 
-The agent then runs under `ExecutionTimeout` (60 seconds by default). Whatever happens, the context, its tools and its memory are disposed, so an agent that keeps the context cannot act after the execution ends. An agent exception gives `Failed`, `agent_error`, and only its type name is logged. A timeout gives `Failed`, `timeout`. Caller cancellation propagates. An exception whose type is listed in `PropagatedExceptionTypes`, or derives from one, is rethrown unchanged after cleanup and never retried; use it for host stops such as a budget limit.
+The agent then runs under `ExecutionTimeout` (60 seconds by default), which starts before the breaker and memory checks, so a slow check also ends in `timeout`. Only a run that returns `Completed` completes Kernel's operation; any other returned outcome fails it. Whatever happens, the context, its tools and its memory are disposed, so an agent that keeps the context cannot act after the execution ends. An agent exception gives `Failed`, `agent_error`, and only its type name is logged. A timeout gives `Failed`, `timeout`. Caller cancellation propagates. An exception whose type is listed in `PropagatedExceptionTypes`, or derives from one, is rethrown unchanged after cleanup and never retried; use it for host stops such as a budget limit.
 
 The effective grants are the registered grants narrowed by `AgentExecutionOptions.NarrowGrantsTo`. A narrowing never widens them.
 
@@ -59,7 +59,7 @@ The effective grants are the registered grants narrowed by `AgentExecutionOption
 
 Any Operator failure fails closed with `Failed`, `gate_error`, except a configured stop exception, which reaches the caller unchanged. When the execution ends, a call still in flight is cancelled, and an approval that arrives afterwards is never consumed or dispatched; memory calls in flight are cancelled the same way.
 
-**Approvals.** A call is keyed by a request key: an HMAC, under a random per-host secret, of the agent, the tool and the canonical arguments, so the key cannot be used to guess the arguments. The first call raises one approval request with a fresh id and returns `AwaitingApproval` with that id; concurrent proposals of the same call share it. Later proposals reuse the open id until it is decided or expires (`ToolApprovalTtl`, 24 hours). An approved id authorizes exactly one dispatch; the next identical call asks again. A denial stands until the request expires. Open approvals live in the host's memory, so after a restart a pending call raises a new request. The approval request carries the tool, the request key and the execution id, never the arguments; showing an approver the exact arguments needs a view served by the agent's host and is not built yet.
+**Approvals.** A call is keyed by a request key: an HMAC, under a random per-host secret, of the grid tenant, the agent, the tool and the canonical arguments. An approval never crosses tenants, and the key cannot be used to guess the arguments. An approval is consumed only before it expires, so a gate reply that arrives late never dispatches. A host keeps at most 1,024 open approvals; when all are live, a new one is refused with `Failed`, `approval_capacity`, and no live approval is dropped. The first call raises one approval request with a fresh id and returns `AwaitingApproval` with that id; concurrent proposals of the same call share it. Later proposals reuse the open id until it is decided or expires (`ToolApprovalTtl`, 24 hours). An approved id authorizes exactly one dispatch; the next identical call asks again. A denial stands until the request expires. Open approvals live in the host's memory, so after a restart a pending call raises a new request. The approval request carries the tool, the request key and the execution id, never the arguments; showing an approver the exact arguments needs a view served by the agent's host and is not built yet.
 
 ## Memory
 
