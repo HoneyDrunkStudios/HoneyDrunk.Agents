@@ -1,5 +1,7 @@
 using HoneyDrunk.Agents.Operations.Contract;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace HoneyDrunk.Agents.Operations.Endpoints;
@@ -59,4 +61,29 @@ internal static partial class Sources
     /// <param name="exceptionType">The exception's type name.</param>
     [LoggerMessage(Level = LogLevel.Warning, Message = "Operations section {Section} is unavailable: its source failed with {ExceptionType}")]
     public static partial void SourceFailed(ILogger logger, string section, string exceptionType);
+
+    /// <summary>
+    /// Answers 503 with no body when a route fails for a reason that is not one section's: a run journal or agent
+    /// directory that throws. The exception never leaves the handler, so neither the host's error page nor its
+    /// request log can show a message that may carry private data.
+    /// </summary>
+    /// <param name="context">The invocation.</param>
+    /// <param name="next">The rest of the pipeline.</param>
+    /// <returns>The route's result, or 503.</returns>
+    public static async ValueTask<object?> GuardAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        try
+        {
+            return await next(context).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (IsFailure(exception, context.HttpContext.RequestAborted))
+        {
+            var route = (context.HttpContext.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText ?? "unknown";
+            RouteFailed(context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(LogCategory), route, exception.GetType().Name);
+            return TypedResults.StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Operations route {Route} failed with {ExceptionType}; answering 503")]
+    private static partial void RouteFailed(ILogger logger, string route, string exceptionType);
 }

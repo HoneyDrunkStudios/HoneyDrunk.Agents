@@ -219,31 +219,50 @@ public sealed class RunJournalTests
 
     /// <summary>
     /// While runs start and complete in parallel, no finished-only read holds a run twice or a run without its
-    /// completion time and status.
+    /// completion time and status. The readers read without pause from before the first of these writes until
+    /// after the last, so reads and writes overlap.
     /// </summary>
     /// <returns>A task.</returns>
     [Fact]
     public async Task Concurrent_completion_never_duplicates_or_tears()
     {
         var journal = new InMemoryAgentRunJournal(maxRunsPerAgent: 500);
-        using var go = new ManualResetEventSlim();
-        var writers = Enumerable.Range(1, 200).Select(number => Task.Run(async () =>
+        for (var number = 1; number <= 100; number++)
         {
-            go.Wait();
+            await Finish(journal, "a", number);
+        }
+
+        using var firstRead = new ManualResetEventSlim();
+        using var written = new CancellationTokenSource();
+        var readers = Enumerable.Range(1, 8).Select(_ => Task.Run(async () =>
+        {
+            var seen = new List<IReadOnlyList<AgentRunRecord>>();
+            do
+            {
+                seen.Add(await journal.RecentAsync("a", 500, null, finishedOnly: true, CancellationToken.None));
+                firstRead.Set();
+            }
+            while (!written.IsCancellationRequested);
+            return seen;
+        })).ToArray();
+        var writers = Enumerable.Range(101, 100).Select(number => Task.Run(async () =>
+        {
+            // No write starts before a read has finished, so at least one read sees the journal part-written.
+            firstRead.Wait();
             await journal.StartedAsync("a", Id(number), Start.AddMilliseconds(number % 7), CancellationToken.None);
+            await Task.Yield();
             await journal.CompletedAsync("a", Id(number), Start.AddSeconds(1), "completed", CancellationToken.None);
         })).ToArray();
-        var readers = Enumerable.Range(1, 50).Select(_ => Task.Run(async () =>
-        {
-            go.Wait();
-            return await journal.RecentAsync("a", 500, null, finishedOnly: true, CancellationToken.None);
-        })).ToArray();
 
-        go.Set();
         await Task.WhenAll(writers);
-        var reads = (await Task.WhenAll(readers)).Append(await journal.RecentAsync("a", 500, null, finishedOnly: true, CancellationToken.None)).ToArray();
+        await written.CancelAsync();
+        var reads = (await Task.WhenAll(readers))
+            .SelectMany(seen => seen)
+            .Append(await journal.RecentAsync("a", 500, null, finishedOnly: true, CancellationToken.None))
+            .ToArray();
 
         Assert.Equal(200, reads[^1].Count);
+        Assert.Contains(reads, read => read.Count is >= 100 and < 200);
         Assert.All(reads, read =>
         {
             Assert.Equal(read.Count, read.Select(run => run.RunId).Distinct(StringComparer.Ordinal).Count());

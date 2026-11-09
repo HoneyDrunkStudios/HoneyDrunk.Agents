@@ -20,6 +20,7 @@ Every route is a `GET` under `/v1` and requires the host's `agent-operations:rea
 - **Version.** Every response carries `schemaVersion: 1`.
 - **Staleness.** Every response carries `generatedAt` (UTC), so a consumer can judge how old it is.
 - **Empty and unavailable are different.** An empty list is `[]`. A part of a response whose source is missing or failing reports `"state": "unavailable"` and carries no value; the rest of the response is still served.
+- **Failure.** A route answers `503` with no body when the host cannot read its runs or its agents. A consumer treats that as unavailable, never as empty.
 - **Identifiers.** A workload `id` and an `environment` are 1 to 64 characters of `a-z 0-9 . _ -`, starting with a letter or digit.
 - **Display names.** `displayName` is 1 to 64 characters, not blank, with no control characters.
 - **Runs.** A run `id` is 32 lowercase hexadecimal digits. Run ids are unique within a list. `status` is one of `completed`, `rejected`, `halted`, `failed`, `awaitingapproval`, `canceled`, `propagated`. `completedAt` is never before `startedAt`. Only finished runs are listed.

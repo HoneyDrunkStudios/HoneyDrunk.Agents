@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -29,11 +30,12 @@ internal sealed class OperationsHost : IAsyncDisposable
     private readonly WebApplication app;
     private readonly AgentTestHarness pieces;
 
-    private OperationsHost(WebApplication app, AgentTestHarness pieces, FakeTimeProvider time)
+    private OperationsHost(WebApplication app, AgentTestHarness pieces, FakeTimeProvider time, CapturedLogs logs)
     {
         this.app = app;
         this.pieces = pieces;
         this.Time = time;
+        this.Logs = logs;
         this.Client = app.GetTestClient();
         this.Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(TestAuthenticationHandler.SchemeName);
         this.Anonymous = app.GetTestClient();
@@ -42,6 +44,8 @@ internal sealed class OperationsHost : IAsyncDisposable
     public static DateTimeOffset Start { get; } = new(2026, 11, 1, 9, 0, 0, TimeSpan.Zero);
 
     public FakeTimeProvider Time { get; }
+
+    public CapturedLogs Logs { get; }
 
     public HttpClient Client { get; }
 
@@ -75,6 +79,8 @@ internal sealed class OperationsHost : IAsyncDisposable
         var pieces = new AgentTestHarness(timeProvider: time);
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Development });
         builder.WebHost.UseTestServer();
+        var logs = new CapturedLogs();
+        builder.Logging.ClearProviders().AddProvider(logs).SetMinimumLevel(LogLevel.Trace);
         services?.Invoke(builder.Services);
         builder.Services.AddSingleton<TimeProvider>(time);
         builder.Services.AddSingleton<IGridContextAccessor>(pieces.GridAccessor);
@@ -123,7 +129,7 @@ internal sealed class OperationsHost : IAsyncDisposable
             throw;
         }
 
-        return new OperationsHost(app, pieces, time);
+        return new OperationsHost(app, pieces, time, logs);
     }
 
     /// <summary>Registers and initializes an agent.</summary>

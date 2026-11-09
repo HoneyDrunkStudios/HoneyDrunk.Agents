@@ -55,6 +55,7 @@ Responses are a safe projection, copied field by field from named fields only:
 - An empty list is `[]`.
 - `generatedAt` says how old a response is.
 - The pause and the budget each have a `state`, and so do the approvals and audit responses. A source the host has not registered, or one that throws, makes only its own part `unavailable`; the rest is still served.
+- Runs have no `state` of their own. When the run journal or the agent directory throws, the route answers `503` with no body, and the failure is logged by exception type name. It is never shown as an empty list.
 
 | Part | Source | When the host has none |
 |---|---|---|
@@ -65,7 +66,7 @@ Responses are a safe projection, copied field by field from named fields only:
 
 ## The run journal
 
-`RunJournalObserver` records each execution from the lifecycle's `execute` and `complete` transitions into an `IAgentRunJournal`. The default, `InMemoryAgentRunJournal`, keeps the newest 100 runs per agent **in this process's memory**: runs are lost on restart, and two processes do not see each other's runs. Register your own `IAgentRunJournal` before `AddAgentOperations` to keep runs somewhere durable. A journal that fails never fails an execution; the failure is logged.
+`RunJournalObserver` records each execution from the lifecycle's `execute` and `complete` transitions into an `IAgentRunJournal`. The default, `InMemoryAgentRunJournal`, keeps the newest 100 runs per agent **in this process's memory**: runs are lost on restart, and two processes do not see each other's runs. Register your own `IAgentRunJournal` before `AddAgentOperations` to keep runs somewhere durable. A journal whose write fails never fails an execution; the failure is logged. A journal whose read fails makes the routes that list runs answer `503`.
 
 ## Local host and fixtures
 

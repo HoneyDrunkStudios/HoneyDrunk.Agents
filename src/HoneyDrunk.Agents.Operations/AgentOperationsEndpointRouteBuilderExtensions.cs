@@ -2,6 +2,7 @@ using HoneyDrunk.Agents.Operations.Endpoints;
 using HoneyDrunk.Agents.Operations.Runs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -39,6 +40,7 @@ public static class AgentOperationsEndpointRouteBuilderExtensions
         }
 
         var group = endpoints.MapGroup("/v1").RequireAuthorization(AgentOperationsPolicies.Read);
+        group.AddEndpointFilter(Sources.GuardAsync);
         WorkloadEndpoints.Map(group);
         ApprovalEndpoints.Map(group);
         AuditEndpoints.Map(group);

@@ -362,6 +362,70 @@ public sealed class EndpointTests
         Assert.Equal(0m, running.GetProperty("budget").GetProperty("value").GetProperty("spent").GetDecimal());
     }
 
+    /// <summary>
+    /// A run journal that fails is a 503 with no body on the routes that read runs. Its message reaches neither the
+    /// response nor the logs, which record the exception's type name only; routes that read no runs are still served.
+    /// </summary>
+    /// <param name="path">A route that reads runs.</param>
+    /// <returns>A task.</returns>
+    [Theory]
+    [InlineData("/v1/workloads")]
+    [InlineData("/v1/workloads/a/runs")]
+    [InlineData("/v1/workloads/a/runs/00000000000000000000000000000001")]
+    public async Task Failing_run_journal_is_503_with_no_message(string path)
+    {
+        await using var host = await OperationsHost.StartAsync(services => services.AddSingleton<IAgentRunJournal>(new FailingRunJournal(FailingRunJournal.Mode.Throws)));
+        await host.AddAgentAsync("a");
+
+        using var response = await host.Client.GetAsync(new Uri(path, UriKind.Relative));
+        var body = await response.Content.ReadAsStringAsync();
+        using var detail = await host.Client.GetAsync(new Uri("/v1/workloads/a", UriKind.Relative));
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Empty(body);
+        Assert.Equal(HttpStatusCode.OK, detail.StatusCode);
+        Assert.Contains(host.Logs.Lines, line => line.StartsWith("HoneyDrunk.Agents.Operations ", StringComparison.Ordinal) && line.Contains("InvalidOperationException", StringComparison.Ordinal));
+        Assert.DoesNotContain(host.Logs.Lines, line => line.Contains("journal-secret", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// While runs start and complete, every workloads response still passes the consumer's rules: no run twice, none
+    /// without its completion.
+    /// </summary>
+    /// <returns>A task.</returns>
+    [Fact]
+    public async Task Workloads_stay_valid_while_runs_complete()
+    {
+        await using var host = await OperationsHost.StartAsync();
+        await host.AddAgentAsync("a");
+        for (var number = 1; number <= 10; number++)
+        {
+            await host.FinishRunAsync("a", number);
+        }
+
+        var writer = Task.Run(async () =>
+        {
+            for (var number = 11; number <= 400; number++)
+            {
+                await host.Journal.StartedAsync("a", OperationsHost.RunId(number), OperationsHost.Start.AddMinutes(number), CancellationToken.None);
+                await Task.Yield();
+                await host.Journal.CompletedAsync("a", OperationsHost.RunId(number), OperationsHost.Start.AddMinutes(number).AddSeconds(30), "completed", CancellationToken.None);
+            }
+        });
+        var responses = new List<JsonElement>();
+        do
+        {
+            responses.Add(await host.GetJsonAsync("/v1/workloads"));
+        }
+        while (!writer.IsCompleted);
+        await writer;
+        responses.Add(await host.GetJsonAsync("/v1/workloads"));
+
+        Assert.All(responses, ConsumerRules.AssertWorkloadsAccepted);
+        Assert.All(responses, response => Assert.Equal(10, response.GetProperty("workloads")[0].GetProperty("runs").GetArrayLength()));
+        Assert.Equal(OperationsHost.RunId(400), responses[^1].GetProperty("workloads")[0].GetProperty("runs")[0].GetProperty("id").GetString());
+    }
+
     /// <summary>A cost guard that throws makes only the budget unavailable; its message never reaches the response.</summary>
     /// <returns>A task.</returns>
     [Fact]
@@ -598,6 +662,8 @@ public sealed class EndpointTests
 
         Assert.Equal(1, (await host.GetJsonAsync("/v1/approvals")).GetProperty("approvals").GetArrayLength());
         Assert.Equal(1, (await host.GetJsonAsync("/v1/workloads/a/audit")).GetProperty("entries").GetArrayLength());
+        Assert.NotEmpty(host.Logs.Lines);
+        Assert.DoesNotContain(host.Logs.Lines, line => line.Contains(Sentinel, StringComparison.Ordinal));
     }
 
     /// <summary>A request with no credentials is rejected on every route.</summary>
