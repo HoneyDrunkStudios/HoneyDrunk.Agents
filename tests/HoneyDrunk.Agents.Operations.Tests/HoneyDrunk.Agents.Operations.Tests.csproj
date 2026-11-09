@@ -2,9 +2,11 @@
   <PropertyGroup><IsPackable>false</IsPackable></PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\HoneyDrunk.Agents.Operations\HoneyDrunk.Agents.Operations.csproj" />
+    <ProjectReference Include="..\..\src\HoneyDrunk.Agents.Testing\HoneyDrunk.Agents.Testing.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="HoneyDrunk.Standards" Version="0.4.4" PrivateAssets="all" />
     <PackageReference Include="HoneyDrunk.Standards.Tests" Version="0.4.4" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.14" />
   </ItemGroup>
 </Project>
