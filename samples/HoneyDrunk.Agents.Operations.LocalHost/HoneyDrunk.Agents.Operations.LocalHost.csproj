@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <Description>A deterministic local agent host that serves the operations contract (ADR-0110) from scripted agents, for building a consumer before a live agent exists. Development only.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\HoneyDrunk.Agents.Operations\HoneyDrunk.Agents.Operations.csproj" />
+    <ProjectReference Include="..\..\src\HoneyDrunk.Agents.Testing\HoneyDrunk.Agents.Testing.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="HoneyDrunk.Standards" Version="0.4.4" PrivateAssets="all" />
+    <PackageReference Include="HoneyDrunk.Operator" Version="0.2.0" />
+  </ItemGroup>
+</Project>

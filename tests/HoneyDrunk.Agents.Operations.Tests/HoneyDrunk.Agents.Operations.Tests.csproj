@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\HoneyDrunk.Agents.Operations\HoneyDrunk.Agents.Operations.csproj" />
     <ProjectReference Include="..\..\src\HoneyDrunk.Agents.Testing\HoneyDrunk.Agents.Testing.csproj" />
+    <ProjectReference Include="..\..\samples\HoneyDrunk.Agents.Operations.LocalHost\HoneyDrunk.Agents.Operations.LocalHost.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="HoneyDrunk.Standards" Version="0.4.4" PrivateAssets="all" />

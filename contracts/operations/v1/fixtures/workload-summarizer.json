@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-01T09:07:48Z",
+  "id": "summarizer",
+  "displayName": "Fixture Summarizer",
+  "environment": "local",
+  "phase": "initialized",
+  "pause": {
+    "state": "available",
+    "value": {
+      "pausedBy": "fixture-operator",
+      "reason": "Paused to review a failed run.",
+      "since": "2026-11-01T09:05:48Z"
+    }
+  },
+  "budget": {
+    "state": "available",
+    "value": {
+      "window": "2026-11",
+      "spent": 0,
+      "limit": 0,
+      "remaining": null
+    }
+  },
+  "supportedActions": []
+}

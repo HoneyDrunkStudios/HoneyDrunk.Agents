@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-01T09:07:48Z",
+  "state": "available",
+  "entries": [
+    {
+      "at": "2026-11-01T09:03:36Z",
+      "event": "operator.cost-guard.recorded",
+      "actor": "reviewer",
+      "outcome": "succeeded",
+      "targetType": "cost-scope",
+      "targetId": "reviewer",
+      "reason": "Recorded 4.25 usd from fixture-model."
+    }
+  ]
+}
