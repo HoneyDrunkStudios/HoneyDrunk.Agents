@@ -21,7 +21,7 @@ namespace HoneyDrunk.Agents;
 /// Agent exceptions become <c>agent_error</c>, except configured stop exceptions, which are rethrown unchanged after
 /// cleanup and never retried.
 /// </summary>
-public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
+public sealed partial class InProcessAgentLifecycle : IAgentLifecycle, IAgentDirectory
 {
     private readonly ConcurrentDictionary<string, Entry> agents = new(StringComparer.Ordinal);
     private readonly IServiceScopeFactory scopeFactory;
@@ -152,6 +152,17 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
 
     /// <inheritdoc />
     public AgentLifecyclePhase GetPhase(string agentId) => this.Get(agentId).Phase;
+
+    /// <inheritdoc />
+    public IReadOnlyList<AgentListing> List()
+    {
+        // Values is a snapshot of the map; no lock is held while it is projected.
+        var listings = this.agents.Values
+            .Select(entry => new AgentListing(entry.AgentId, entry.Name, entry.Phase))
+            .ToArray();
+        Array.Sort(listings, (left, right) => string.CompareOrdinal(left.AgentId, right.AgentId));
+        return listings;
+    }
 
     private async Task<AgentResult> ExecuteAdmittedAsync(Admission admission, AgentRequest request, AgentExecutionOptions options, CancellationToken cancellationToken)
     {
@@ -465,6 +476,8 @@ public sealed partial class InProcessAgentLifecycle : IAgentLifecycle
         public string AgentId { get; } = agentId;
 
         public IAgentDescriptor Descriptor { get; } = descriptor;
+
+        public string Name { get; } = descriptor.Name ?? string.Empty;
 
         public AgentRegistration Registration { get; } = registration;
 
