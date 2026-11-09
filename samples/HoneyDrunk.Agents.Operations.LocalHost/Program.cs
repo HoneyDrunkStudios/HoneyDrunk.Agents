@@ -37,6 +37,13 @@ public static class Program
             clock.Freeze(TimeProvider.System.GetUtcNow().AddHours(-1));
             await LocalWorkload.SeedAsync(app.Services, clock).ConfigureAwait(false);
             clock.Release();
+            var token = app.Services.GetRequiredService<LocalHostToken>();
+            if (token.Generated)
+            {
+                // Shown once on the local console and never logged; set LocalHost:Token to keep one between runs.
+                await Console.Out.WriteLineAsync($"Local operations host token for this run: {token.Value}").ConfigureAwait(false);
+            }
+
             await app.RunAsync().ConfigureAwait(false);
         }
     }
@@ -46,15 +53,16 @@ public static class Program
     /// <param name="clock">The host's clock.</param>
     /// <param name="configure">Optionally configures the builder, for example to use a test server.</param>
     /// <returns>The application.</returns>
-    /// <exception cref="InvalidOperationException">The environment is not Development, or no token is configured.</exception>
+    /// <exception cref="InvalidOperationException">The environment is not Development, or the configured token is too short.</exception>
     public static WebApplication Build(string[] args, LocalClock clock, Action<WebApplicationBuilder>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(clock);
         var builder = WebApplication.CreateBuilder(args);
         configure?.Invoke(builder);
-        DevelopmentBearerHandler.RequireDevelopment(builder.Environment, builder.Configuration);
+        DevelopmentBearerHandler.RequireDevelopment(builder.Environment);
 
         var services = builder.Services;
+        services.AddSingleton(LocalHostToken.From(builder.Configuration));
         services.AddSingleton<TimeProvider>(clock);
         services.AddSingleton(clock);
         AddRuntimePieces(services);

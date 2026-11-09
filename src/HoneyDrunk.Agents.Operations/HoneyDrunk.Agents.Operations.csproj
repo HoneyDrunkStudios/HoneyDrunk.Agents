@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <Description>The shared, versioned HTTP operations contract for HoneyDrunk Grid agent hosts (ADR-0110): a bounded run journal fed by lifecycle transitions, and read endpoints for workloads, runs, pending approvals, budget, pause and recent audit.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="HoneyDrunk.Agents.Operations.Tests" />
@@ -15,5 +16,9 @@
     <PackageReference Include="HoneyDrunk.Standards" Version="0.4.4" PrivateAssets="all" />
     <PackageReference Include="HoneyDrunk.Operator.Abstractions" Version="0.2.0" />
     <PackageReference Include="HoneyDrunk.Audit.Abstractions" Version="0.2.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="CHANGELOG.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 </Project>

@@ -33,4 +33,4 @@ Adding an optional property or a new route is not a new version: consumers must 
 
 ## Fixtures
 
-[fixtures/](fixtures/) holds the responses of the deterministic local host (`samples/HoneyDrunk.Agents.Operations.LocalHost`), so a consumer can be built and tested without a live agent. Run ids and `generatedAt` are replaced by placeholders.
+[fixtures/](fixtures/) holds the responses of the deterministic local host (`samples/HoneyDrunk.Agents.Operations.LocalHost`), for a clock fixed at 2026-11-01T09:00:00Z, so a consumer can be built and tested without a live agent. Run ids carry random bits, so each is replaced by a placeholder: its place in start order, as 32 hexadecimal digits. `unauthorized.txt` holds the status of a request with no credentials. The fixtures hold no token: the local host makes a random one for each run, or reads `LocalHost:Token` from its environment.

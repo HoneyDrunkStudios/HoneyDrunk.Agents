@@ -1,18 +1,19 @@
 # HoneyDrunk.Agents
 
-The HoneyDrunk Grid's agent runtime: how an agent is registered, given a context, allowed to call tools and remember things, and run one execution at a time (ADR-0020). Agents compose the Capabilities node for tools, the Memory node for memory and the Operator node for safety gates. This repository calls no model.
+The HoneyDrunk Grid's agent runtime: how an agent is registered, given a context, allowed to call tools and remember things, and run one execution at a time (ADR-0020). Agents compose the Capabilities node for tools, the Memory node for memory and the Operator node for safety gates. An agent host can also serve the shared operations contract, so a control room reads every agent the same way (ADR-0110). This repository calls no model.
 
 ## Packages
 
 | Package | Use it from | Holds |
 |---|---|---|
 | `HoneyDrunk.Agents.Abstractions` | Any code that implements or calls an agent | `IAgent`, `IAgentRunContext`, `IToolInvoker`, `IAgentMemory`, `IAgentLifecycle`, and records such as `AgentDescriptor`, `AgentGrants`, `ToolCall`, `AgentResult` and `AgentMemoryBinding`. It references only `HoneyDrunk.Kernel.Abstractions`. |
-| `HoneyDrunk.Agents` | The host's composition root only | `InProcessAgentLifecycle`, `ToolApprovalLedger`, `AgentRuntimeOptions`, `IAgentLifecycleObserver` and `AddHoneyDrunkAgents`. |
+| `HoneyDrunk.Agents` | The host's composition root only | `InProcessAgentLifecycle`, `IAgentDirectory`, `ToolApprovalLedger`, `AgentRuntimeOptions`, `IAgentLifecycleObserver` and `AddHoneyDrunkAgents`. |
+| `HoneyDrunk.Agents.Operations` | The host's web project only | The version 1 operations contract over HTTP: `AddAgentOperations`, `MapAgentOperations`, the run journal and the response records. See its [README](src/HoneyDrunk.Agents.Operations/README.md). |
 | `HoneyDrunk.Agents.Testing` | Test projects only | `AgentTestHarness` over the real runtime, `ScriptedAgent`, `InMemoryToolInvoker`, `InMemoryAgentMemory`, `TestAgentRunContext` and deterministic Kernel contexts. |
 
 ## Hosting
 
-`AddHoneyDrunkAgents` registers the lifecycle and the approval ledger. The host composes the rest: Kernel (`AddHoneyDrunkNode` plus telemetry), Capabilities (`ICapabilityRegistry`, `ICapabilityInvoker`), Memory (`IMemoryScopeResolver`, `IMemoryStore`), Operator (`ICircuitBreaker`, `IDecisionPolicy`, `IApprovalGate`) and logging. Options are checked when the lifecycle is built: at least one tool call, a positive timeout and a positive approval lifetime.
+`AddHoneyDrunkAgents` registers the lifecycle, its read-only agent directory (`IAgentDirectory`, which lists the registered agents with their phase) and the approval ledger. The host composes the rest: Kernel (`AddHoneyDrunkNode` plus telemetry), Capabilities (`ICapabilityRegistry`, `ICapabilityInvoker`), Memory (`IMemoryScopeResolver`, `IMemoryStore`), Operator (`ICircuitBreaker`, `IDecisionPolicy`, `IApprovalGate`) and logging. Options are checked when the lifecycle is built: at least one tool call, a positive timeout and a positive approval lifetime.
 
 The lifecycle reads the grid context once, from `IGridContextAccessor`, and builds the execution's operation context over it. In an HTTP request, Kernel's default accessor already finds the request's context. A background host (a worker or a scheduled job) registers Kernel's `ScopedGridContextAccessor` as `IGridContextAccessor`, initializes a grid context, and wraps each execution in `ScopedGridContextAccessor.SetContext(grid)`. Without a context the execution returns `grid_context_missing` instead of throwing.
 
@@ -69,12 +70,25 @@ Any Operator failure fails closed with `Failed`, `gate_error`, except a configur
 
 Activities are `agents.execute`, `agents.tool_call` and `agents.memory`, through Kernel's `ITelemetryActivityFactory`, with only these tags: `agent.id`, `agent.execution_id`, `agent.transition`, `agent.outcome`, `tool.name`, `tool.version`, `tool.status`, `memory.operation`, `memory.result_count`, `gate.kind` and `gate.outcome`. A proposed tool name appears only once it matches a binding. Tool arguments and output, memory content and tags, and exception messages never reach logs, traces or results.
 
+## Operations endpoints
+
+`HoneyDrunk.Agents.Operations` gives a host the shared read contract with two calls. Every route requires the `agent-operations:read` authorization policy, which the host defines; mapping fails at startup without it.
+
+```csharp
+services.AddAgentOperations(options => options.Environment = "production");
+app.MapAgentOperations();
+```
+
+It serves the agents this host lists, their finished runs, pending approvals, each agent's pause and budget, and recent audit. Responses are a safe projection: no request payload, agent output, tool argument or approval context. The run journal behind it is in memory and per process. The schemas, rules and fixtures are in [contracts/operations/v1](contracts/operations/v1/README.md), and `samples/HoneyDrunk.Agents.Operations.LocalHost` serves a fixed workload for building a consumer.
+
 ## Not built yet
 
 - **The function-calling loop.** The AI node's abstractions cannot yet send tools to a model, so an execution is one structured decision made by the agent's own code, followed by at most `MaxToolCallsPerExecution` tool calls. The loop will live in this runtime package (Grid invariant 135).
-- **Audit records for lifecycle transitions.** Operator has no audit surface yet; transitions go to observers, logs and telemetry.
-- **Recording a human approval decision.** Operator's current gate cannot record one; that arrives with Operator's decision recorder.
+- **Audit records for lifecycle transitions.** Transitions go to observers, logs, telemetry and the operations run journal; none is written to Audit.
+- **The act side of the operations contract.** Starting and cancelling a run, deciding an approval, and pausing or resuming an agent over HTTP are not built; the endpoints are read-only.
+- **A durable run journal.** `IAgentRunJournal` is the seam; only the in-memory journal ships.
 
 ## Decisions
 
 - [ADR-0020](https://github.com/HoneyDrunkStudios/HoneyDrunk.Studio/blob/main/adrs/ADR-0020-stand-up-honeydrunk-agents-node.md): stand up the Agents node.
+- [ADR-0110](https://github.com/HoneyDrunkStudios/HoneyDrunk.Studio/blob/main/adrs/ADR-0110-agent-operations-contract-and-admin-control-room.md): the shared agent operations contract.

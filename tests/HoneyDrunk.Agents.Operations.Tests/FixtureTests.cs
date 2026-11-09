@@ -145,26 +145,66 @@ public sealed class FixtureTests
         Assert.Equal("401", ReadFixture("unauthorized.txt").Trim());
     }
 
-    /// <summary>The local host does not start outside the Development environment, or without a real token.</summary>
+    /// <summary>The local host does not start outside the Development environment.</summary>
     /// <param name="environment">The environment name.</param>
-    /// <param name="token">The configured token.</param>
     [Theory]
-    [InlineData("Production", Token)]
-    [InlineData("Staging", Token)]
-    [InlineData("Development", "")]
-    [InlineData("Development", "short")]
-    public void Local_host_refuses_to_start_outside_development(string environment, string token)
+    [InlineData("Production")]
+    [InlineData("Staging")]
+    public void Local_host_refuses_to_start_outside_development(string environment)
     {
-        var failure = Assert.Throws<InvalidOperationException>(() => Program.Build([$"--environment={environment}", $"--LocalHost:Token={token}"], new LocalClock()));
+        var failure = Assert.Throws<InvalidOperationException>(() => Program.Build([$"--environment={environment}", $"--LocalHost:Token={Token}"], new LocalClock()));
 
         Assert.Contains("Development", failure.Message, StringComparison.Ordinal);
     }
 
-    private static async Task<WebApplication> StartAsync()
+    /// <summary>A configured token that is too short to be a credential is refused at startup.</summary>
+    [Fact]
+    public void Local_host_refuses_a_short_token()
+    {
+        var failure = Assert.Throws<InvalidOperationException>(() => Program.Build(["--environment=Development", "--LocalHost:Token=short"], new LocalClock()));
+
+        Assert.Contains(LocalHostToken.Setting, failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("short", failure.Message.Replace("too short", string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// With no token configured the host makes a random one for the run, so no credential is ever checked in, and
+    /// accepts exactly that token.
+    /// </summary>
+    /// <returns>A task.</returns>
+    [Fact]
+    public async Task Local_host_generates_a_token_when_none_is_configured()
+    {
+        await using var first = await StartAsync(token: null);
+        await using var second = await StartAsync(token: null);
+        var token = first.Services.GetRequiredService<LocalHostToken>();
+        using var client = first.GetTestClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token.Value);
+        using var other = first.GetTestClient();
+        other.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", second.Services.GetRequiredService<LocalHostToken>().Value);
+
+        using var accepted = await client.GetAsync(new Uri("/v1/workloads", UriKind.Relative));
+        using var refused = await other.GetAsync(new Uri("/v1/workloads", UriKind.Relative));
+
+        Assert.True(token.Generated);
+        Assert.InRange(token.Value.Length, 32, 128);
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, refused.StatusCode);
+        Assert.False((await StartAndReadTokenAsync(Token)).Generated);
+    }
+
+    private static async Task<LocalHostToken> StartAndReadTokenAsync(string token)
+    {
+        await using var app = await StartAsync(token);
+        return app.Services.GetRequiredService<LocalHostToken>();
+    }
+
+    private static async Task<WebApplication> StartAsync(string? token = Token)
     {
         var clock = new LocalClock();
         clock.Freeze(Start);
-        var app = Program.Build(["--environment=Development", $"--LocalHost:Token={Token}"], clock, builder => builder.WebHost.UseTestServer());
+        string[] args = token is null ? ["--environment=Development"] : ["--environment=Development", $"--LocalHost:Token={token}"];
+        var app = Program.Build(args, clock, builder => builder.WebHost.UseTestServer());
         try
         {
             await LocalWorkload.SeedAsync(app.Services, clock);
