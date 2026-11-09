@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ApprovalsResponse",
+  "type": "object",
+  "description": "GET /v1/approvals",
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "state",
+    "approvals"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the response was built (UTC), so a consumer can judge staleness."
+    },
+    "state": {
+      "enum": [
+        "available",
+        "unavailable"
+      ]
+    },
+    "approvals": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/pendingApprovalView"
+      },
+      "description": "Empty and meaningless when state is unavailable."
+    }
+  },
+  "$defs": {
+    "pendingApprovalView": {
+      "type": "object",
+      "description": "An approval waiting for a decision. The request's context is never included.",
+      "required": [
+        "approvalId",
+        "workloadId",
+        "action",
+        "requestedAt",
+        "expiresAt"
+      ],
+      "properties": {
+        "approvalId": {
+          "type": "string"
+        },
+        "workloadId": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+        },
+        "action": {
+          "type": "string"
+        },
+        "requestedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, ISO-8601."
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, ISO-8601."
+        }
+      }
+    }
+  }
+}
