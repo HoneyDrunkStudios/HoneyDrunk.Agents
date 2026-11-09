@@ -13,6 +13,9 @@ internal static class AuditEndpoints
 {
     private const int MaxEntries = 50;
 
+    // The target types whose id is an agent id: the agent itself, and Operator's spend scope for it.
+    private static readonly HashSet<string> AgentKeyedTargetTypes = new(StringComparer.Ordinal) { "agent", "cost-scope" };
+
     // The audit query reads earliest first, so the newest entries are found by widening the window: a busy agent
     // is answered from the last hour, and only a quiet one reads the whole week.
     private static readonly TimeSpan[] Windows = [TimeSpan.FromHours(1), TimeSpan.FromDays(1), TimeSpan.FromDays(7)];
@@ -63,9 +66,9 @@ internal static class AuditEndpoints
 
     private static async Task<AuditEntryView[]> ReadAsync(IAuditQuery audit, string agentId, DateTimeOffset since, DateTimeOffset until, CancellationToken cancellationToken)
     {
-        string[] targets = [agentId, Projection.AgentPrefix + agentId];
+        var prefixed = Projection.AgentPrefix + agentId;
         var found = new List<AuditEntry>();
-        foreach (var target in targets)
+        foreach (var target in new[] { agentId, prefixed })
         {
             found.AddRange(await audit.ReadAsync(new AuditQueryFilter(since, until, TargetId: target), cancellationToken).ConfigureAwait(false));
         }
@@ -74,7 +77,7 @@ internal static class AuditEndpoints
         return
         [
             .. found
-                .Where(entry => entry?.Target is not null && targets.Contains(entry.Target.Id, StringComparer.Ordinal) && entry.OccurredAt >= since && entry.OccurredAt <= until)
+                .Where(entry => entry?.Target is not null && IsAbout(entry.Target, agentId, prefixed) && entry.OccurredAt >= since && entry.OccurredAt <= until)
                 .DistinctBy(entry => (id: entry.Id, at: entry.OccurredAt, name: entry.EventName, actor: entry.Actor, target: entry.Target.Id))
                 .OrderByDescending(entry => entry.OccurredAt)
                 .ThenByDescending(entry => entry.Id.Value, StringComparer.Ordinal)
@@ -82,4 +85,10 @@ internal static class AuditEndpoints
                 .Select(Projection.Audit),
         ];
     }
+
+    // "agent:{id}" names an agent whatever the target type. The bare id names one only under a type that is keyed
+    // by agent id; a user, an approval or anything else that happens to share the id is not the agent.
+    private static bool IsAbout(AuditTarget target, string agentId, string prefixed) =>
+        string.Equals(target.Id, prefixed, StringComparison.Ordinal)
+        || (string.Equals(target.Id, agentId, StringComparison.Ordinal) && AgentKeyedTargetTypes.Contains(target.Type));
 }

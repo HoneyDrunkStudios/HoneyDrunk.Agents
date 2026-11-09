@@ -475,6 +475,34 @@ public sealed class EndpointTests
         Assert.All(audit.Filters, filter => Assert.True(filter.Since >= now.AddDays(-7) && filter.Until == now));
     }
 
+    /// <summary>
+    /// An entry whose target id is the bare agent id is shown only when its target type is one an agent id names;
+    /// another kind of thing that happens to share the id is not the agent. The prefixed form names an agent by itself.
+    /// </summary>
+    /// <param name="targetType">The entry's target type.</param>
+    /// <param name="targetId">The entry's target id.</param>
+    /// <param name="shown">Whether the entry belongs in agent <c>a</c>'s audit.</param>
+    /// <returns>A task.</returns>
+    [Theory]
+    [InlineData("agent", "a", true)]
+    [InlineData("cost-scope", "a", true)]
+    [InlineData("pause", "agent:a", true)]
+    [InlineData("user", "a", false)]
+    [InlineData("approval", "a", false)]
+    [InlineData("", "a", false)]
+    [InlineData("AGENT", "a", false)]
+    public async Task Audit_bare_id_needs_an_agent_target_type(string targetType, string targetId, bool shown)
+    {
+        var audit = new FakeAuditQuery();
+        await using var host = await OperationsHost.StartAsync(services => services.AddSingleton<IAuditQuery>(audit));
+        await host.AddAgentAsync("a");
+        audit.Add(Entry("1", OperationsHost.Start.AddMinutes(-1), "something.happened", targetId) with { Target = new AuditTarget(targetType, targetId) });
+
+        var entries = (await host.GetJsonAsync("/v1/workloads/a/audit")).GetProperty("entries");
+
+        Assert.Equal(shown ? 1 : 0, entries.GetArrayLength());
+    }
+
     /// <summary>A busy agent's audit is cut to its 50 newest entries, and entries about other targets are never shown.</summary>
     /// <returns>A task.</returns>
     [Fact]
