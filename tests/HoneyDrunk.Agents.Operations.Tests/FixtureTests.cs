@@ -29,7 +29,7 @@ public sealed class FixtureTests
         ("audit-reviewer.json", "/v1/workloads/reviewer/audit"),
     ];
 
-    private static string FixtureDirectory => Path.Combine(RepoFiles.ContractDirectory, "fixtures");
+    private static string FixtureDirectory => Path.Join(RepoFiles.ContractDirectory, "fixtures");
 
     /// <summary>
     /// Every fixture equals what the local host serves for a clock fixed at 2026-11-01T09:00:00Z, with run ids
@@ -62,7 +62,7 @@ public sealed class FixtureTests
             Directory.CreateDirectory(FixtureDirectory);
             foreach (var (file, content) in produced)
             {
-                await File.WriteAllTextAsync(Path.Combine(FixtureDirectory, file), content);
+                await File.WriteAllTextAsync(Path.Join(FixtureDirectory, file), content);
             }
         }
 
@@ -255,5 +255,5 @@ public sealed class FixtureTests
         return JsonSerializer.Serialize(document.RootElement, Indented).ReplaceLineEndings("\n") + "\n";
     }
 
-    private static string ReadFixture(string file) => File.ReadAllText(Path.Combine(FixtureDirectory, file)).ReplaceLineEndings("\n");
+    private static string ReadFixture(string file) => File.ReadAllText(Path.Join(FixtureDirectory, file)).ReplaceLineEndings("\n");
 }

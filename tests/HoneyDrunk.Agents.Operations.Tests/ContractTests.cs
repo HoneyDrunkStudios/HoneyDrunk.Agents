@@ -138,7 +138,7 @@ public sealed class ContractTests
     [MemberData(nameof(Schemas))]
     public void Schemas_are_valid_json_and_name_every_property(string file, Type record, string[] definitions, Type[] definitionRecords)
     {
-        using var schema = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoFiles.ContractDirectory, file)));
+        using var schema = JsonDocument.Parse(File.ReadAllText(Path.Join(RepoFiles.ContractDirectory, file)));
         var root = schema.RootElement;
 
         Assert.Equal("https://json-schema.org/draft/2020-12/schema", root.GetProperty("$schema").GetString());
