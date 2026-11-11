@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunsPage",
+  "type": "object",
+  "description": "GET /v1/workloads/{id}/runs?limit=&before=",
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "runs",
+    "nextCursor"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the response was built (UTC), so a consumer can judge staleness."
+    },
+    "runs": {
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "#/$defs/runSummary"
+      },
+      "description": "Finished runs only, newest first, unique ids."
+    },
+    "nextCursor": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The before value for the next page; null when this page was not full."
+    }
+  },
+  "$defs": {
+    "runSummary": {
+      "type": "object",
+      "description": "One finished run.",
+      "required": [
+        "id",
+        "status",
+        "startedAt",
+        "completedAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "rejected",
+            "halted",
+            "failed",
+            "awaitingapproval",
+            "canceled",
+            "propagated"
+          ]
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, ISO-8601."
+        },
+        "completedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, ISO-8601. Never before startedAt."
+        }
+      }
+    }
+  }
+}

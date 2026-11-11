@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunDetail",
+  "type": "object",
+  "description": "GET /v1/workloads/{id}/runs/{runId}",
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "run"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the response was built (UTC), so a consumer can judge staleness."
+    },
+    "run": {
+      "$ref": "#/$defs/runSummary"
+    }
+  },
+  "$defs": {
+    "runSummary": {
+      "type": "object",
+      "description": "One finished run.",
+      "required": [
+        "id",
+        "status",
+        "startedAt",
+        "completedAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "rejected",
+            "halted",
+            "failed",
+            "awaitingapproval",
+            "canceled",
+            "propagated"
+          ]
+        },
+        "startedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, ISO-8601."
+        },
+        "completedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, ISO-8601. Never before startedAt."
+        }
+      }
+    }
+  }
+}

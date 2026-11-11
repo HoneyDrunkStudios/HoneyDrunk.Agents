@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-01T09:07:48Z",
+  "workloads": [
+    {
+      "id": "reviewer",
+      "displayName": "Fixture Reviewer",
+      "environment": "local",
+      "runs": [
+        {
+          "id": "00000000000000000000000000000003",
+          "status": "awaitingapproval",
+          "startedAt": "2026-11-01T09:02:24Z",
+          "completedAt": "2026-11-01T09:02:36Z"
+        },
+        {
+          "id": "00000000000000000000000000000002",
+          "status": "rejected",
+          "startedAt": "2026-11-01T09:01:12Z",
+          "completedAt": "2026-11-01T09:01:24Z"
+        },
+        {
+          "id": "00000000000000000000000000000001",
+          "status": "completed",
+          "startedAt": "2026-11-01T09:00:00Z",
+          "completedAt": "2026-11-01T09:00:12Z"
+        }
+      ]
+    },
+    {
+      "id": "summarizer",
+      "displayName": "Fixture Summarizer",
+      "environment": "local",
+      "runs": [
+        {
+          "id": "00000000000000000000000000000005",
+          "status": "halted",
+          "startedAt": "2026-11-01T09:06:48Z",
+          "completedAt": "2026-11-01T09:06:48Z"
+        },
+        {
+          "id": "00000000000000000000000000000004",
+          "status": "failed",
+          "startedAt": "2026-11-01T09:04:36Z",
+          "completedAt": "2026-11-01T09:04:48Z"
+        }
+      ]
+    }
+  ]
+}

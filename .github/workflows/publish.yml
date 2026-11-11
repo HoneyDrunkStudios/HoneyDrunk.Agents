@@ -89,6 +89,7 @@ jobs:
       release-nuget-packages: |
         HoneyDrunk.Agents.Abstractions
         HoneyDrunk.Agents
+        HoneyDrunk.Agents.Operations
         HoneyDrunk.Agents.Testing
       release-docs-url: 'https://github.com/HoneyDrunkStudios/HoneyDrunk.Agents#readme'
       actions-ref: 'e3aa37c20dffe55155d95793465bcb6d94f280a2'
@@ -131,6 +132,7 @@ jobs:
         expected-packages: |-
           HoneyDrunk.Agents.Abstractions
           HoneyDrunk.Agents
+          HoneyDrunk.Agents.Operations
           HoneyDrunk.Agents.Testing
     - name: Generate release notes
       id: notes
@@ -141,6 +143,7 @@ jobs:
         nuget-packages: |
           HoneyDrunk.Agents.Abstractions
           HoneyDrunk.Agents
+          HoneyDrunk.Agents.Operations
           HoneyDrunk.Agents.Testing
         docs-url: https://github.com/HoneyDrunkStudios/HoneyDrunk.Agents#readme
     - name: Create GitHub Release after successful publication

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><IsPackable>false</IsPackable></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\HoneyDrunk.Agents.Operations\HoneyDrunk.Agents.Operations.csproj" />
+    <ProjectReference Include="..\..\src\HoneyDrunk.Agents.Testing\HoneyDrunk.Agents.Testing.csproj" />
+    <ProjectReference Include="..\..\samples\HoneyDrunk.Agents.Operations.LocalHost\HoneyDrunk.Agents.Operations.LocalHost.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="HoneyDrunk.Standards" Version="0.4.4" PrivateAssets="all" />
+    <PackageReference Include="HoneyDrunk.Standards.Tests" Version="0.4.4" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="11.0.0" />
+  </ItemGroup>
+</Project>

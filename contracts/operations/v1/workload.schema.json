@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorkloadDetail",
+  "type": "object",
+  "description": "GET /v1/workloads/{id}",
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "id",
+    "displayName",
+    "environment",
+    "phase",
+    "pause",
+    "budget",
+    "supportedActions"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the response was built (UTC), so a consumer can judge staleness."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Not blank; no control characters."
+    },
+    "environment": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "phase": {
+      "enum": [
+        "registered",
+        "initialized",
+        "decommissioned"
+      ]
+    },
+    "pause": {
+      "$ref": "#/$defs/pauseSection"
+    },
+    "budget": {
+      "$ref": "#/$defs/budgetSection"
+    },
+    "supportedActions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Always empty in this version."
+    }
+  },
+  "$defs": {
+    "pauseSection": {
+      "type": "object",
+      "description": "When available, a null value means the agent is not paused. When unavailable, the value is null and means nothing.",
+      "required": [
+        "state",
+        "value"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "available",
+            "unavailable"
+          ]
+        },
+        "value": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pauseView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "pauseView": {
+      "type": "object",
+      "required": [
+        "pausedBy",
+        "reason",
+        "since"
+      ],
+      "properties": {
+        "pausedBy": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "since": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC, ISO-8601."
+        }
+      }
+    },
+    "budgetSection": {
+      "type": "object",
+      "description": "When unavailable, the value is null and means nothing.",
+      "required": [
+        "state",
+        "value"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "available",
+            "unavailable"
+          ]
+        },
+        "value": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/budgetView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "budgetView": {
+      "type": "object",
+      "required": [
+        "window",
+        "spent",
+        "limit",
+        "remaining"
+      ],
+      "properties": {
+        "window": {
+          "type": "string",
+          "description": "The monthly window, yyyy-MM (UTC)."
+        },
+        "spent": {
+          "type": "number"
+        },
+        "limit": {
+          "type": "number",
+          "description": "0 means there is no limit."
+        },
+        "remaining": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Null when there is no limit."
+        }
+      }
+    }
+  }
+}

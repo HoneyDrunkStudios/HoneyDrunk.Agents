@@ -1,6 +1,6 @@
 # HoneyDrunk.Agents agent instructions
 
-This repository holds the Grid agent runtime (ADR-0020): `HoneyDrunk.Agents.Abstractions` (the agent, execution context, tool invoker, agent memory and lifecycle contracts, with the records they use), `HoneyDrunk.Agents` (the in-process lifecycle, tool invocation through the Capabilities node behind Operator gates, scoped memory through the Memory node, and service registration) and `HoneyDrunk.Agents.Testing` (test harness and fixtures). Inspect [README.md](README.md), the tracked files and open implementation PRs before making claims; an open PR is not merged behavior. Do not invent node ownership or new responsibilities from the repository name.
+This repository holds the Grid agent runtime (ADR-0020): `HoneyDrunk.Agents.Abstractions` (the agent, execution context, tool invoker, agent memory and lifecycle contracts, with the records they use), `HoneyDrunk.Agents` (the in-process lifecycle, tool invocation through the Capabilities node behind Operator gates, scoped memory through the Memory node, and service registration), `HoneyDrunk.Agents.Operations` (the read side of the shared agent operations contract over HTTP, ADR-0110: a run journal fed by lifecycle transitions, the response records and the `/v1` endpoints) and `HoneyDrunk.Agents.Testing` (test harness and fixtures). `samples/HoneyDrunk.Agents.Operations.LocalHost` is a Development-only host that serves the contract from a fixed workload; it is not packed. Inspect [README.md](README.md), the tracked files and open implementation PRs before making claims; an open PR is not merged behavior. Do not invent node ownership or new responsibilities from the repository name.
 
 ## Build and test
 
@@ -17,6 +17,12 @@ The contract-shape canary (`Category=ContractShape`) freezes `IAgent`, `IAgentRu
 HONEYDRUNK_UPDATE_CONTRACT_SHAPE=1 dotnet test tests/HoneyDrunk.Agents.Abstractions.Tests -c Release --filter Category=ContractShape
 ```
 
+`contracts/operations/v1` holds the operations contract's JSON Schemas and the fixtures the local host produces for a fixed clock. `ContractTests` keeps the schemas' property names equal to the response records, and `FixtureTests` fails when the fixtures differ from the local host's output. To accept an intended change, regenerate the fixtures, then read every file for private data before committing:
+
+```bash
+UPDATE_FIXTURES=1 dotnet test tests/HoneyDrunk.Agents.Operations.Tests -c Release --filter Fixtures_match_local_host_output
+```
+
 `tests/HoneyDrunk.Agents.Canary` runs the runtime under Kernel's real `AddHoneyDrunkNode` registration (as a background host) and against the real Kernel grid context and agent-context projection, the real Capabilities runtime and Auth guard, the real Memory runtime, and HoneyDrunk.Auth's `DefaultAuthorizationPolicy`.
 
 ## Boundaries
@@ -26,6 +32,7 @@ HONEYDRUNK_UPDATE_CONTRACT_SHAPE=1 dotnet test tests/HoneyDrunk.Agents.Abstracti
 - Memory goes only through `IAgentMemory` over the Memory node's store and scopes; execution state is disposed when the execution completes (invariant 134).
 - There is no function-calling loop yet. When it is added, it goes in the runtime package (invariant 135).
 - Tool arguments, tool output, memory content and tags, and agent exception messages never go into logs, traces or results. Results carry codes, not text.
+- `Operations` references the runtime, the `*.Abstractions` of Operator, Audit and Kernel, and ASP.NET Core only. Every route requires the `agent-operations:read` policy, and the package chooses no authentication scheme. A response is a projection copied from named fields: never a request payload, an agent's output, tool arguments, an approval's context, audit changes or metadata, or a credential. A change to a response is a contract change: follow the versioning rule in `contracts/operations/v1/README.md` and update the schema and fixtures with it.
 
 ## Working rules
 

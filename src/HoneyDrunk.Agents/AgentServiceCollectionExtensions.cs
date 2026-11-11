@@ -8,7 +8,7 @@ namespace HoneyDrunk.Agents;
 public static class AgentServiceCollectionExtensions
 {
     /// <summary>
-    /// Adds the in-process lifecycle and the approval ledger as singletons, and <see cref="TimeProvider.System"/>
+    /// Adds the in-process lifecycle, its agent directory and the approval ledger as singletons, and <see cref="TimeProvider.System"/>
     /// unless the host registered a clock. The host composes Kernel (grid context, agent context factory,
     /// telemetry), Capabilities, Memory, Operator and logging.
     /// </summary>
@@ -27,6 +27,9 @@ public static class AgentServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton(provider => new ToolApprovalLedger(provider.GetRequiredService<TimeProvider>()));
         services.TryAddSingleton<IAgentLifecycle, InProcessAgentLifecycle>();
+        services.TryAddSingleton<IAgentDirectory>(provider =>
+            provider.GetRequiredService<IAgentLifecycle>() as IAgentDirectory
+            ?? throw new InvalidOperationException("The registered IAgentLifecycle does not list its agents; register an IAgentDirectory for it."));
         return services;
     }
 }
