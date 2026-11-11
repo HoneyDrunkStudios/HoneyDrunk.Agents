@@ -22,9 +22,9 @@ public sealed class BoundedAuditTests
         {
             AuditEntry[] entries =
             [
-                Entry($"agent-{index:D3}", OperationsHost.Start.AddSeconds(-3 * index), "agent", "a"),
-                Entry($"cost-{index:D3}", OperationsHost.Start.AddSeconds((-3 * index) - 1), "cost-scope", "a"),
-                Entry($"prefixed-{index:D3}", OperationsHost.Start.AddSeconds((-3 * index) - 2), "approval", "agent:a"),
+                Entry($"agent-{index:D3}", OperationsHost.Start.AddSeconds(-3d * index), "agent", "a"),
+                Entry($"cost-{index:D3}", OperationsHost.Start.AddSeconds((-3d * index) - 1), "cost-scope", "a"),
+                Entry($"prefixed-{index:D3}", OperationsHost.Start.AddSeconds((-3d * index) - 2), "approval", "agent:a"),
             ];
             foreach (var entry in entries)
             {
@@ -45,7 +45,7 @@ public sealed class BoundedAuditTests
         Assert.Equal(0, audit.LegacyReads);
         Assert.Equal([50, 50, 50], audit.ReturnedSizes);
         Assert.Equal(3, audit.Filters.Count);
-        Assert.Equal([("agent", "a"), ("cost-scope", "a"), ((string?)null, "agent:a")], audit.Filters.Select(filter => (targetType: filter.TargetType, targetId: filter.TargetId)));
+        Assert.Equal([("agent", "a"), ("cost-scope", "a"), (null, "agent:a")], audit.Filters.Select(filter => (targetType: filter.TargetType, targetId: filter.TargetId)));
         Assert.All(audit.Filters, filter =>
         {
             Assert.Equal(50, filter.Limit);
