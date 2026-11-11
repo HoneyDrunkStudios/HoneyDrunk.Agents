@@ -8,3 +8,4 @@
 - A bounded run journal (`IAgentRunJournal`, in-memory by default) fed by lifecycle transitions.
 - The response records, their JSON settings, and JSON Schemas and fixtures under `contracts/operations/v1`.
 - Serialize asynchronous journal writes per agent/run, preserving start times and isolating failures.
+- `truncated` on the approvals response: true when the approval desk returned a full page, so an older approval for a listed agent may be missing.

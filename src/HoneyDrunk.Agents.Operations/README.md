@@ -34,7 +34,7 @@ Every route requires the authorization policy `agent-operations:read` (`AgentOpe
 | `GET /v1/workloads/{id}` | One agent: its phase, its manual pause and its spend against this month's budget. `supportedActions` is always empty in this version. |
 | `GET /v1/workloads/{id}/runs?limit=&before=` | A page of finished runs, newest first. `limit` is 1 to 50 (default 20). `before` is a run id; `nextCursor` is the value for the next page. |
 | `GET /v1/workloads/{id}/runs/{runId}` | One finished run. A run that is still running is `404`. |
-| `GET /v1/approvals` | Operator approvals waiting for a decision, for the agents this host lists. |
+| `GET /v1/approvals` | Operator approvals waiting for a decision, for the agents this host lists, newest first. `truncated` is `true` when the list may be incomplete. |
 | `GET /v1/workloads/{id}/audit` | The last 7 days of audit entries about the agent, newest first, at most 50. |
 
 An unknown agent is `404`. A bad `limit` or `before` is `400`. A decommissioned agent stays listed, with its phase, and its runs stay readable.
@@ -63,6 +63,11 @@ Responses are a safe projection, copied field by field from named fields only:
 | Budget | Operator's `ICostGuard` | `unavailable` |
 | Approvals | Operator's `IApprovalDesk` | `unavailable` |
 | Audit | Audit's `IAuditQuery` | `unavailable` |
+
+## Known limits
+
+- **Approvals read one desk page.** `IApprovalDesk.ListPendingAsync` returns the 100 newest pending approvals for every subject, with no filter and no cursor. When that page is full, the response sets `truncated` to `true`: an older approval for one of this host's agents may be missing. Listing by subject needs a change in the Operator node.
+- **Audit is bounded by time, not by count.** `IAuditQuery` reads earliest first, so the newest 50 entries are found by reading the last hour, then the last day, then the last 7 days, stopping at the first window that holds 50. Each read returns every entry in its window for the agent, so a very busy agent costs one large read of the last hour. A newest-first, limited read needs a change in the Audit node.
 
 ## The run journal
 

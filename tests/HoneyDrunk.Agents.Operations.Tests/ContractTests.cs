@@ -88,13 +88,13 @@ public sealed class ContractTests
     {
         var unavailable = Section.Unavailable<BudgetView>();
         var notPaused = Section.Available<PauseView>(null);
-        var approvals = new ApprovalsResponse(At, SectionState.Unavailable, []);
+        var approvals = new ApprovalsResponse(At, SectionState.Unavailable, [], false);
 
         Assert.Null(unavailable.Value);
         Assert.Equal("""{"state":"unavailable","value":null}""", JsonSerializer.Serialize(unavailable, OperationsJson.Options));
         Assert.Equal("""{"state":"available","value":null}""", JsonSerializer.Serialize(notPaused, OperationsJson.Options));
         Assert.Equal(
-            """{"schemaVersion":1,"generatedAt":"2026-11-01T09:00:00Z","state":"unavailable","approvals":[]}""",
+            """{"schemaVersion":1,"generatedAt":"2026-11-01T09:00:00Z","state":"unavailable","approvals":[],"truncated":false}""",
             JsonSerializer.Serialize(approvals, OperationsJson.Options));
     }
 

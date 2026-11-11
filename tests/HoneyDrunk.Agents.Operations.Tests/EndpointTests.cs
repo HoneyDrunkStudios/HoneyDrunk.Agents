@@ -496,8 +496,40 @@ public sealed class EndpointTests
         var approvals = await host.GetJsonAsync("/v1/approvals");
 
         Assert.Equal(
-            """{"schemaVersion":1,"generatedAt":"2026-11-01T09:01:00Z","state":"available","approvals":[{"approvalId":"approval-4","workloadId":"b","action":"tool.delete","requestedAt":"2026-11-01T09:01:00Z","expiresAt":"2026-11-01T10:00:00Z"},{"approvalId":"approval-1","workloadId":"a","action":"tool.publish","requestedAt":"2026-11-01T09:00:00Z","expiresAt":"2026-11-01T10:00:00Z"}]}""",
+            """{"schemaVersion":1,"generatedAt":"2026-11-01T09:01:00Z","state":"available","approvals":[{"approvalId":"approval-4","workloadId":"b","action":"tool.delete","requestedAt":"2026-11-01T09:01:00Z","expiresAt":"2026-11-01T10:00:00Z"},{"approvalId":"approval-1","workloadId":"a","action":"tool.publish","requestedAt":"2026-11-01T09:00:00Z","expiresAt":"2026-11-01T10:00:00Z"}],"truncated":false}""",
             approvals.GetRawText());
+    }
+
+    /// <summary>
+    /// The desk returns one page, newest first, for every subject. When that page is full, an older approval for a
+    /// listed agent may be missing, and the response says so; an empty list must not read as "nothing is waiting".
+    /// </summary>
+    /// <param name="others">How many newer approvals for other subjects fill the desk's page.</param>
+    /// <param name="truncated">Whether the response is marked as truncated.</param>
+    /// <param name="shown">How many approvals the response lists.</param>
+    /// <returns>A task.</returns>
+    [Theory]
+    [InlineData(99, true, 1)]
+    [InlineData(100, true, 0)]
+    [InlineData(98, false, 1)]
+    public async Task Approvals_say_when_the_desk_page_is_full(int others, bool truncated, int shown)
+    {
+        await using var host = await OperationsHost.StartAsync();
+        await host.AddAgentAsync("a");
+        host.Gate.DefaultOutcome = ApprovalOutcome.Pending;
+        var expiry = OperationsHost.Start.AddHours(1);
+        await host.Gate.RequestAsync(Request("approval-old", "agent:a", "tool.publish", expiry));
+        host.Time.Advance(TimeSpan.FromMinutes(1));
+        for (var index = 0; index < others; index++)
+        {
+            await host.Gate.RequestAsync(Request($"other-{index:D3}", "user:someone", "tool.publish", expiry));
+        }
+
+        var approvals = await host.GetJsonAsync("/v1/approvals");
+
+        Assert.Equal("available", approvals.GetProperty("state").GetString());
+        Assert.Equal(truncated, approvals.GetProperty("truncated").GetBoolean());
+        Assert.Equal(shown, approvals.GetProperty("approvals").GetArrayLength());
     }
 
     /// <summary>A desk that throws makes the approvals unavailable, with an empty list and no message.</summary>
@@ -511,7 +543,7 @@ public sealed class EndpointTests
         var approvals = await host.GetJsonAsync("/v1/approvals");
 
         Assert.Equal(
-            """{"schemaVersion":1,"generatedAt":"2026-11-01T09:00:00Z","state":"unavailable","approvals":[]}""",
+            """{"schemaVersion":1,"generatedAt":"2026-11-01T09:00:00Z","state":"unavailable","approvals":[],"truncated":false}""",
             approvals.GetRawText());
     }
 

@@ -12,7 +12,7 @@ Every route is a `GET` under `/v1` and requires the host's `agent-operations:rea
 | `/v1/workloads/{id}` | [workload.schema.json](workload.schema.json) | One agent with its phase, pause and budget. `404` for an unknown id. |
 | `/v1/workloads/{id}/runs?limit=&before=` | [runs.schema.json](runs.schema.json) | A page of finished runs, newest first. `limit` is 1 to 50 (default 20). `before` is a run id. `400` for a bad `limit` or `before`; `404` for an unknown id. |
 | `/v1/workloads/{id}/runs/{runId}` | [run.schema.json](run.schema.json) | One finished run. `404` for an unknown agent or run, and for a run that is still running. |
-| `/v1/approvals` | [approvals.schema.json](approvals.schema.json) | Approvals waiting for a decision, for the agents this host lists. |
+| `/v1/approvals` | [approvals.schema.json](approvals.schema.json) | Approvals waiting for a decision, for the agents this host lists, newest first, with `truncated`. |
 | `/v1/workloads/{id}/audit` | [audit.schema.json](audit.schema.json) | The last 7 days of audit entries about the agent, newest first, at most 50. `404` for an unknown id. |
 
 ## Rules
@@ -25,6 +25,7 @@ Every route is a `GET` under `/v1` and requires the host's `agent-operations:rea
 - **Display names.** `displayName` is 1 to 64 characters, not blank, with no control characters.
 - **Runs.** A run `id` is 32 lowercase hexadecimal digits. Run ids are unique within a list. `status` is one of `completed`, `rejected`, `halted`, `failed`, `awaitingapproval`, `canceled`, `propagated`. `completedAt` is never before `startedAt`. Only finished runs are listed.
 - **Times.** UTC, ISO-8601, with a `Z` suffix.
+- **Truncated approvals.** The host reads one page of the approval desk: the 100 newest pending approvals for every subject. When that page is full, `truncated` is `true` and an older approval for a listed agent may be missing. A consumer then shows that the list may be incomplete, never that nothing is waiting.
 - **Audit targets.** An audit entry is about an agent when its target id is `agent:{id}`, or the bare `{id}` under the target type `agent` or `cost-scope`. Another kind of target that shares the id is not shown.
 - **Safe projection.** No response includes a prompt, a request payload, tool arguments, an agent's output, an approval's context, audit field changes or metadata, or credentials.
 

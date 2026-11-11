@@ -27,12 +27,15 @@ internal static class ApprovalEndpoints
         var now = time.GetUtcNow();
         if (desk is null)
         {
-            return Sources.Json(new ApprovalsResponse(now, SectionState.Unavailable, []));
+            return Sources.Json(new ApprovalsResponse(now, SectionState.Unavailable, [], false));
         }
 
         try
         {
+            // The desk has one page, newest first, for every subject, and no filter or cursor. A full page may have
+            // cut off an older approval for one of this host's agents, so the response says the list may be short.
             var pending = await desk.ListPendingAsync(MaxApprovals, cancellationToken).ConfigureAwait(false);
+            var truncated = pending.Count >= MaxApprovals;
             var listed = Projection.Listed(directory).Select(agent => agent.AgentId).ToHashSet(StringComparer.Ordinal);
             var approvals = pending
                 .Select(Projection.Approval)
@@ -41,12 +44,12 @@ internal static class ApprovalEndpoints
                 .DistinctBy(approval => approval.ApprovalId, StringComparer.Ordinal)
                 .Take(MaxApprovals)
                 .ToArray();
-            return Sources.Json(new ApprovalsResponse(now, SectionState.Available, approvals));
+            return Sources.Json(new ApprovalsResponse(now, SectionState.Available, approvals, truncated));
         }
         catch (Exception exception) when (Sources.IsFailure(exception, cancellationToken))
         {
             Sources.SourceFailed(loggers.CreateLogger(Sources.LogCategory), "approvals", exception.GetType().Name);
-            return Sources.Json(new ApprovalsResponse(now, SectionState.Unavailable, []));
+            return Sources.Json(new ApprovalsResponse(now, SectionState.Unavailable, [], false));
         }
     }
 }
