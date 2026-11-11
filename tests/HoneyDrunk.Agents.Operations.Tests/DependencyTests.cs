@@ -20,7 +20,10 @@ public sealed class DependencyTests
             "HoneyDrunk.Audit.Abstractions",
             "HoneyDrunk.Kernel.Abstractions",
         ];
-        string[] allowedFamilies = ["Microsoft.AspNetCore", "Microsoft.Extensions", "System"];
+
+        // "netstandard" is the base-library facade. The compiled package does not reference it; the coverage
+        // collector rewrites the assembly under test and adds it, so the check passes with and without coverage.
+        string[] allowedFamilies = ["Microsoft.AspNetCore", "Microsoft.Extensions", "System", "netstandard"];
 
         var unexpected = typeof(AgentOperationsPolicies).Assembly
             .GetReferencedAssemblies()
