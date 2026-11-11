@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.2.1]
+
+- No contract change; released with the repository version.
+
 ## [0.2.0]
 
 - No change; released with the repository version. The contract shape is the same as 0.1.0.

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.1]
+
+- Scope one bounded pending-approval read to the exposed workloads with Operator 0.3.0, retaining `truncated` and legacy-page behavior.
+- Require Audit 0.3.0 bounded newest-first reads: three source pages of at most 50, with no unbounded fallback.
+- Keep the version 1 response shape and deterministic fixtures unchanged.
+
 ## [0.2.0]
 
 - First release: the read side of the version 1 operations contract (ADR-0110).

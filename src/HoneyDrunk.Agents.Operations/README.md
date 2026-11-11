@@ -61,13 +61,35 @@ Responses are a safe projection, copied field by field from named fields only:
 |---|---|---|
 | Pause | Operator's `IAgentPauses` | `unavailable` |
 | Budget | Operator's `ICostGuard` | `unavailable` |
-| Approvals | Operator's `IApprovalDesk` | `unavailable` |
-| Audit | Audit's `IAuditQuery` | `unavailable` |
+| Approvals | Operator's `IApprovalDesk` (subject-scoped capability when available) | `unavailable` |
+| Audit | Audit's `IAuditQuery` with `IBoundedAuditQuery` | `unavailable` |
 
-## Known limits
+## Bounded source reads
 
-- **Approvals read one desk page.** `IApprovalDesk.ListPendingAsync` returns the 100 newest pending approvals for every subject, with no filter and no cursor. When that page is full, the response sets `truncated` to `true`: an older approval for one of this host's agents may be missing. Listing by subject needs a change in the Operator node.
-- **Audit is bounded by time, not by count.** `IAuditQuery` reads earliest first, so the newest 50 entries are found by reading the last hour, then the last day, then the last 7 days, stopping at the first window that holds 50. Each read returns every entry in its window for the agent, so a very busy agent costs one large read of the last hour. A newest-first, limited read needs a change in the Audit node.
+**Approvals.** Operator 0.3.0's optional `ISubjectScopedApprovalDesk` is used through the existing
+`IApprovalDesk` registration. One query includes only the first 20 workloads exposed by `/workloads`
+and returns at most 100 pending approvals, with filtering before the source limit. Other subjects can
+no longer displace these workloads' older approvals. An empty workload list makes no source query.
+
+The released `truncated` field is preserved: a full page sets it to `true` for both scoped and legacy
+desks. A legacy desk is queried once with limit 100 and filtered afterward, so its full page can still
+hide older matching approvals. Consumers must continue to show that a truncated list may be incomplete.
+Oversized pages and scoped pages that contain invalid, repeated or out-of-scope approvals report
+`unavailable`; the endpoint never widens or repeats the read.
+
+**Audit.** Audit 0.3.0's `IBoundedAuditQuery` is required through the existing `IAuditQuery` registration.
+A legacy provider without that capability reports `unavailable` without an unbounded fallback.
+For one inclusive seven-day window, three disjoint queries each read at most 50 newest entries:
+bare agent id with target type `agent`, bare id with type `cost-scope`, and `agent:{id}` with any type.
+At most 150 source results enter the endpoint before it selects the newest 50. Nonconforming pages
+or a failure in any scope report `unavailable`, never a partial successful history.
+
+These are result-materialization and query-count bounds, not guarantees about a database's internal
+scan or sort work. The newest occurrence times are preserved. When more records share the cutoff
+time than a limit allows, membership follows each provider's audit-id comparison. The response sorts
+its bounded candidates ordinally by id for ties, but cannot promise global ordinal-id membership
+across arbitrary provider collations. The local host uses ordinal comparison. The three calls do not
+provide a shared transaction snapshot while new events arrive.
 
 ## The run journal
 
