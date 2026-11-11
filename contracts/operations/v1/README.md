@@ -25,7 +25,7 @@ Every route is a `GET` under `/v1` and requires the host's `agent-operations:rea
 - **Display names.** `displayName` is 1 to 64 characters, not blank, with no control characters.
 - **Runs.** A run `id` is 32 lowercase hexadecimal digits. Run ids are unique within a list. `status` is one of `completed`, `rejected`, `halted`, `failed`, `awaitingapproval`, `canceled`, `propagated`. `completedAt` is never before `startedAt`. Only finished runs are listed.
 - **Times.** UTC, ISO-8601, with a `Z` suffix.
-- **Truncated approvals.** The host reads one page of the approval desk: the 100 newest pending approvals for every subject. When that page is full, `truncated` is `true` and an older approval for a listed agent may be missing. A consumer then shows that the list may be incomplete, never that nothing is waiting.
+- **Truncated approvals.** The host reads at most one page of 100 pending approvals, scoped to the first 20 workloads shown by `/workloads` when the desk supports subject-scoped reads. Legacy desks read every subject and are filtered afterward. When either page is full, `truncated` is `true` and older matching approvals may be missing. A consumer then shows that the list may be incomplete, never that nothing is waiting. The field, its type and the response shape are unchanged.
 - **Audit targets.** An audit entry is about an agent when its target id is `agent:{id}`, or the bare `{id}` under the target type `agent` or `cost-scope`. Another kind of target that shares the id is not shown.
 - **Safe projection.** No response includes a prompt, a request payload, tool arguments, an agent's output, an approval's context, audit field changes or metadata, or credentials.
 

@@ -7,9 +7,9 @@ namespace HoneyDrunk.Agents.Operations.Contract;
 /// <param name="State">Whether the approval desk answered. When unavailable, the list is empty and means nothing.</param>
 /// <param name="Approvals">The pending approvals for agents this host lists, newest first.</param>
 /// <param name="Truncated">
-/// Whether the approval desk returned a full page. The desk lists the newest pending approvals for every subject, so
-/// when its page is full an older approval for a listed agent may be missing, and an empty list is not "nothing is
-/// waiting".
+/// Whether the approval desk returned a full page, so older matching approvals may be missing. A capable desk
+/// scopes the page to the workloads list; a legacy desk reads every subject. An empty truncated list is not
+/// "nothing is waiting".
 /// </param>
 public sealed record ApprovalsResponse(DateTimeOffset GeneratedAt, SectionState State, IReadOnlyList<PendingApprovalView> Approvals, bool Truncated)
 {

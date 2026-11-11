@@ -35,7 +35,7 @@
     },
     "truncated": {
       "type": "boolean",
-      "description": "True when the approval desk returned a full page (100, every subject, newest first), so an older approval for a listed agent may be missing. Always false when state is unavailable."
+      "description": "True when the approval desk returned a full page of 100, so older matching approvals may be missing. Capable desks scope the page to the workloads list; legacy desks read every subject. Always false when state is unavailable."
     }
   },
   "$defs": {

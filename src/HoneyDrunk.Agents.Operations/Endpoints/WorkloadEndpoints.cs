@@ -14,7 +14,6 @@ namespace HoneyDrunk.Agents.Operations.Endpoints;
 /// <summary>The workload and run read endpoints.</summary>
 internal static class WorkloadEndpoints
 {
-    private const int MaxWorkloads = 20;
     private const int MaxRunsPerWorkload = 10;
     private const int DefaultPageSize = 20;
     private const int MaxPageSize = 50;
@@ -38,7 +37,7 @@ internal static class WorkloadEndpoints
     {
         var environment = options.Value.Environment;
         var workloads = new List<WorkloadSummary>();
-        foreach (var agent in Projection.Listed(directory).Take(MaxWorkloads))
+        foreach (var agent in Projection.Listed(directory).Take(Projection.MaxListedWorkloads))
         {
             var runs = await journal.RecentAsync(agent.AgentId, MaxRunsPerWorkload, null, finishedOnly: true, cancellationToken).ConfigureAwait(false);
             workloads.Add(new WorkloadSummary(agent.AgentId, Projection.DisplayName(agent), environment, Projection.Runs(runs, MaxRunsPerWorkload)));

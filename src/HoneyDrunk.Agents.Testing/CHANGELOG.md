@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.2.1]
+
+- Move to HoneyDrunk.Operator.Testing 0.3.0, including subject-scoped approval reads.
+
 ## [0.2.0]
 
 - Moves to `HoneyDrunk.Operator.Testing` 0.2.0. No other change.

@@ -15,6 +15,9 @@ internal static class Projection
     /// <summary>The prefix of an agent's subject and pause name.</summary>
     public const string AgentPrefix = "agent:";
 
+    /// <summary>The maximum number of workloads exposed by the list endpoint.</summary>
+    public const int MaxListedWorkloads = 20;
+
     private const int MaxDisplayName = 64;
 
     /// <summary>Lists the host's agents with valid ids, each once, ordered by id.</summary>

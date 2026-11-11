@@ -1,8 +1,10 @@
 using HoneyDrunk.Agents.Abstractions;
 using HoneyDrunk.Agents.Operations.Runs;
+using HoneyDrunk.Agents.Operations.Tests.Approvals;
 using HoneyDrunk.Audit.Abstractions;
 using HoneyDrunk.Kernel.Abstractions.Identity;
 using HoneyDrunk.Operator.Abstractions;
+using HoneyDrunk.Operator.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using System.Net;
@@ -514,7 +516,8 @@ public sealed class EndpointTests
     [InlineData(98, false, 1)]
     public async Task Approvals_say_when_the_desk_page_is_full(int others, bool truncated, int shown)
     {
-        await using var host = await OperationsHost.StartAsync();
+        await using var host = await OperationsHost.StartAsync(services => services.AddSingleton<IApprovalDesk>(provider =>
+            new LegacyApprovalDesk(new InMemoryApprovalDesk((InMemoryApprovalGate)provider.GetRequiredService<IApprovalGate>()))));
         await host.AddAgentAsync("a");
         host.Gate.DefaultOutcome = ApprovalOutcome.Pending;
         var expiry = OperationsHost.Start.AddHours(1);
@@ -604,7 +607,7 @@ public sealed class EndpointTests
     [Fact]
     public async Task Audit_returns_at_most_50_newest_about_the_agent()
     {
-        var audit = new FakeAuditQuery { IgnoreTarget = true };
+        var audit = new FakeAuditQuery();
         await using var host = await OperationsHost.StartAsync(services => services.AddSingleton<IAuditQuery>(audit));
         await host.AddAgentAsync("a");
         for (var number = 1; number <= 60; number++)

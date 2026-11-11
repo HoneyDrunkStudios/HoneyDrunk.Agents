@@ -1,5 +1,6 @@
 using HoneyDrunk.Agents.Operations.Contract;
 using HoneyDrunk.Operator.Abstractions;
+using HoneyDrunk.Operator.Abstractions.Approvals;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -32,18 +33,37 @@ internal static class ApprovalEndpoints
 
         try
         {
-            // The desk has one page, newest first, for every subject, and no filter or cursor. A full page may have
-            // cut off an older approval for one of this host's agents, so the response says the list may be short.
-            var pending = await desk.ListPendingAsync(MaxApprovals, cancellationToken).ConfigureAwait(false);
-            var truncated = pending.Count >= MaxApprovals;
-            var listed = Projection.Listed(directory).Select(agent => agent.AgentId).ToHashSet(StringComparer.Ordinal);
+            var listed = Projection.Listed(directory).Take(Projection.MaxListedWorkloads).Select(agent => agent.AgentId).ToHashSet(StringComparer.Ordinal);
+            if (listed.Count == 0)
+            {
+                return Sources.Json(new ApprovalsResponse(now, SectionState.Available, [], false));
+            }
+
+            var scoped = desk as ISubjectScopedApprovalDesk;
+            var pending = scoped is not null
+                ? await scoped.ListPendingAsync(new PendingApprovalQuery([.. listed.Select(id => Projection.AgentPrefix + id)], MaxApprovals), cancellationToken).ConfigureAwait(false)
+                : await desk.ListPendingAsync(MaxApprovals, cancellationToken).ConfigureAwait(false);
+            if (pending.Count > MaxApprovals)
+            {
+                throw new InvalidOperationException("The approval desk exceeded the requested page size.");
+            }
+
+            // Keep the released completeness signal for both scoped and legacy pages: a full page may omit older approvals.
+            var truncated = pending.Count == MaxApprovals;
             var approvals = pending
                 .Select(Projection.Approval)
                 .OfType<PendingApprovalView>()
                 .Where(approval => listed.Contains(approval.WorkloadId))
                 .DistinctBy(approval => approval.ApprovalId, StringComparer.Ordinal)
+                .OrderByDescending(approval => approval.RequestedAt)
+                .ThenBy(approval => approval.ApprovalId, StringComparer.Ordinal)
                 .Take(MaxApprovals)
                 .ToArray();
+            if (scoped is not null && approvals.Length != pending.Count)
+            {
+                throw new InvalidOperationException("The approval desk violated the workload-scoped query contract.");
+            }
+
             return Sources.Json(new ApprovalsResponse(now, SectionState.Available, approvals, truncated));
         }
         catch (Exception exception) when (Sources.IsFailure(exception, cancellationToken))

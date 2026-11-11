@@ -9,6 +9,6 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="HoneyDrunk.Standards" Version="0.4.4" PrivateAssets="all" />
-    <PackageReference Include="HoneyDrunk.Operator" Version="0.2.0" />
+    <PackageReference Include="HoneyDrunk.Operator" Version="0.3.0" />
   </ItemGroup>
 </Project>
