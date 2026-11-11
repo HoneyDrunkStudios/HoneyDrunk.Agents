@@ -14,6 +14,6 @@
     <PackageReference Include="HoneyDrunk.Operator.Testing" Version="0.2.0" />
     <PackageReference Include="HoneyDrunk.Auth" Version="0.6.2" />
     <PackageReference Include="HoneyDrunk.Audit.Abstractions" Version="0.2.2" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
   </ItemGroup>
 </Project>

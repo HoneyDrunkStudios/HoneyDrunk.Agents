@@ -10,6 +10,8 @@ namespace HoneyDrunk.Agents.Operations.Runs;
 /// <param name="logger">The logger.</param>
 public sealed partial class RunJournalObserver(IAgentRunJournal journal, ILogger<RunJournalObserver> logger) : IAgentLifecycleObserver
 {
+    private readonly Lock gate = new();
+    private readonly Dictionary<(string agentId, string runId), Task> pending = [];
     private readonly IAgentRunJournal journal = journal ?? throw new ArgumentNullException(nameof(journal));
     private readonly ILogger<RunJournalObserver> logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
@@ -22,46 +24,49 @@ public sealed partial class RunJournalObserver(IAgentRunJournal journal, ILogger
             return;
         }
 
-        Task write;
-        try
+        var key = (agentId: transition.AgentId, runId);
+        lock (this.gate)
         {
-            // The lifecycle's caller may already be canceled; the record of its run is written regardless.
-            write = transition.Transition == "execute"
-                ? this.journal.StartedAsync(transition.AgentId, runId, transition.At, CancellationToken.None)
-                : this.journal.CompletedAsync(transition.AgentId, runId, transition.At, AgentRunStatus.FromOutcome(transition.Outcome), CancellationToken.None);
+            var previous = this.pending.GetValueOrDefault(key, Task.CompletedTask);
+            var write = this.WriteAfterAsync(previous, transition, runId);
+            this.pending[key] = write;
+            _ = write.ContinueWith(
+                completed =>
+                {
+                    lock (this.gate)
+                    {
+                        if (this.pending.TryGetValue(key, out var latest) && ReferenceEquals(latest, completed))
+                        {
+                            this.pending.Remove(key);
+                        }
+                    }
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
         }
-        catch (Exception exception) when (exception is not OutOfMemoryException)
-        {
-            JournalWriteFailed(this.logger, transition.AgentId, runId, transition.Transition, exception.GetType().Name);
-            return;
-        }
-
-        this.Observe(write, transition.AgentId, runId, transition.Transition);
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Agent {AgentId} run {RunId}: journaling {Transition} failed with {ExceptionType}")]
     private static partial void JournalWriteFailed(ILogger logger, string agentId, string runId, string transition, string exceptionType);
 
-    private static string FaultName(Task write) => write.Exception?.InnerException?.GetType().Name ?? "unknown";
-
-    // The lifecycle calls synchronously, so a write that is still running is observed, never awaited.
-    private void Observe(Task? write, string agentId, string runId, string transition)
+    // Synchronous journals still finish inline. Asynchronous writes are ordered per agent/run without
+    // blocking the lifecycle or unrelated runs, and only unfinished chains stay in the dictionary.
+    private async Task WriteAfterAsync(Task previous, AgentLifecycleTransition transition, string runId)
     {
-        if (write is null || write.IsCompletedSuccessfully)
+        try
         {
-            return;
-        }
+            await previous.ConfigureAwait(false);
 
-        if (write.IsFaulted)
+            // The lifecycle's caller may already be canceled; its run is written regardless.
+            var write = transition.Transition == "execute"
+                ? this.journal.StartedAsync(transition.AgentId, runId, transition.At, CancellationToken.None)
+                : this.journal.CompletedAsync(transition.AgentId, runId, transition.At, AgentRunStatus.FromOutcome(transition.Outcome), CancellationToken.None);
+            await write.ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
         {
-            JournalWriteFailed(this.logger, agentId, runId, transition, FaultName(write));
-            return;
+            JournalWriteFailed(this.logger, transition.AgentId, runId, transition.Transition, exception.GetType().Name);
         }
-
-        _ = write.ContinueWith(
-            task => JournalWriteFailed(this.logger, agentId, runId, transition, FaultName(task)),
-            CancellationToken.None,
-            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-            TaskScheduler.Default);
     }
 }

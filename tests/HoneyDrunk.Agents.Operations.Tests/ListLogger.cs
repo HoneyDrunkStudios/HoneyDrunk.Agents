@@ -8,6 +8,8 @@ internal sealed class ListLogger<T> : ILogger<T>
 {
     private readonly List<(LogLevel level, string message, Exception? exception)> entries = [];
 
+    public TaskCompletionSource Written { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     public IReadOnlyList<(LogLevel level, string message, Exception? exception)> Entries
     {
         get
@@ -30,5 +32,7 @@ internal sealed class ListLogger<T> : ILogger<T>
         {
             this.entries.Add((logLevel, formatter(state, exception), exception));
         }
+
+        this.Written.TrySetResult();
     }
 }

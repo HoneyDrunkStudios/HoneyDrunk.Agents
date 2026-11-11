@@ -276,11 +276,12 @@ public sealed class RunJournalTests
 
     /// <summary>A journal that fails never throws into the lifecycle; the failure is logged by type name only.</summary>
     /// <param name="mode">How the journal fails.</param>
+    /// <returns>A task.</returns>
     [Theory]
     [InlineData((int)FailingRunJournal.Mode.Throws)]
     [InlineData((int)FailingRunJournal.Mode.Faulted)]
     [InlineData((int)FailingRunJournal.Mode.Later)]
-    public void Observer_swallows_journal_failure(int mode)
+    public async Task Observer_swallows_journal_failure(int mode)
     {
         var journal = new FailingRunJournal((FailingRunJournal.Mode)mode);
         var logger = new ListLogger<RunJournalObserver>();
@@ -288,6 +289,7 @@ public sealed class RunJournalTests
 
         observer.OnTransition(new AgentLifecycleTransition("a", Id(1), "execute", Start, null));
         journal.Pending.TrySetException(new InvalidOperationException("journal-secret"));
+        await logger.Written.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         var (level, message, exception) = Assert.Single(logger.Entries);
         Assert.Equal(LogLevel.Warning, level);

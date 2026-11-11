@@ -7,3 +7,4 @@
 - Routes for workloads, one workload with its pause and budget, a page of finished runs, one run, pending approvals and recent audit.
 - A bounded run journal (`IAgentRunJournal`, in-memory by default) fed by lifecycle transitions.
 - The response records, their JSON settings, and JSON Schemas and fixtures under `contracts/operations/v1`.
+- Serialize asynchronous journal writes per agent/run, preserving start times and isolating failures.
