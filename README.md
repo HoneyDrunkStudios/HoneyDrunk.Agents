@@ -2,6 +2,10 @@
 
 The HoneyDrunk Grid's agent runtime: how an agent is registered, given a context, allowed to call tools and remember things, and run one execution at a time (ADR-0020). Agents compose the Capabilities node for tools, the Memory node for memory and the Operator node for safety gates. This repository calls no model.
 
+## SDK requirement
+
+Build and test with the .NET 11 SDK selected by `global.json`. Runtime packages target `net11.0`; consuming applications must also target .NET 11 or later. The contracts-only Abstractions package targets both `net10.0` and `net11.0` to preserve existing contract consumers.
+
 ## Packages
 
 | Package | Use it from | Holds |
