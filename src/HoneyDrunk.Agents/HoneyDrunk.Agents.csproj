@@ -13,7 +13,7 @@
     <PackageReference Include="HoneyDrunk.Standards" Version="0.4.4" PrivateAssets="all" />
     <PackageReference Include="HoneyDrunk.Kernel.Abstractions" Version="0.8.2" />
     <PackageReference Include="HoneyDrunk.Capabilities.Abstractions" Version="0.1.0" />
-    <PackageReference Include="HoneyDrunk.Memory.Abstractions" Version="0.1.0" />
+    <PackageReference Include="HoneyDrunk.Memory.Abstractions" Version="0.2.0" />
     <PackageReference Include="HoneyDrunk.Operator.Abstractions" Version="0.3.0" />
   </ItemGroup>
   <ItemGroup>
