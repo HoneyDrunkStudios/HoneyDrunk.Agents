@@ -9,11 +9,11 @@
   <ItemGroup>
     <PackageReference Include="HoneyDrunk.Standards" Version="0.4.4" PrivateAssets="all" />
     <PackageReference Include="HoneyDrunk.Capabilities.Testing" Version="0.1.0" />
-    <PackageReference Include="HoneyDrunk.Memory" Version="0.1.0" />
-    <PackageReference Include="HoneyDrunk.Memory.Providers.InMemory" Version="0.1.0" />
+    <PackageReference Include="HoneyDrunk.Memory" Version="0.2.0" />
+    <PackageReference Include="HoneyDrunk.Memory.Providers.InMemory" Version="0.2.0" />
     <PackageReference Include="HoneyDrunk.Operator.Testing" Version="0.3.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
-    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="11.0.0" />
   </ItemGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
